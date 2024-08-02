@@ -50,6 +50,9 @@ void set_cpu_affinity(int cpu) {
 }
 
 void read_file(const char *filename, int is_main_process) {
+    clock_t start, end;
+    double cpu_time_used;
+
     for (int i = 0; i < 10; i++) {
         FILE *file = fopen(filename, "r");
         if (!file) {
@@ -64,19 +67,13 @@ void read_file(const char *filename, int is_main_process) {
         char *file_content = (char *)malloc(file_size + 1);
         if (!file_content) {
             fprintf(stderr, "Memory allocation failed for file %s\n", filename);
-            // free(file_content);
+            // free(file_content); ask
             fclose(file);
             exit(1);
         }
 
-    // file_content[file_size] = '\0';
-    // free(file_content);
-    // fclose(file);
+        start = clock();
 
-
-    // start = clock();
-
-    // Read the entire file into the allocated buffer
         size_t read_size = fread(file_content, 1, file_size, file);
         if (read_size != file_size) {
             fprintf(stderr, "File read failed for file %s\n", filename);
@@ -87,25 +84,17 @@ void read_file(const char *filename, int is_main_process) {
 
     file_content[file_size] = '\0';
     file_content[file_size] = '\0';
+    file_content[file_size] = '\0';
     // end = clock();
-
-    // cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-    // Print the file size
-    // printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n",filename, file_size, cpu_time_used);
-
-    // printf("Contenido del archivo %s:\n%s\n", filename, file_content);
-
-    // Clean up
         file_content[file_size] = '\0';
+    file_content[file_size] = '\0';
     // end = clock();
 
-    // cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-    // Print the file size
-    // printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n",filename, file_size, cpu_time_used);
+        end = clock();
 
-    // printf("Contenido del archivo %s:\n%s\n", filename, file_content);
+        cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+        printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n", filename, file_size, cpu_time_used);
 
-    // Clean up
         free(file_content);
         fclose(file);
     }
@@ -136,7 +125,7 @@ int main(int argc, char *argv[]) {
                 directory = optarg;
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-s | -m] -f <folder>\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-s | -m] [-f <folder>]\n", argv[0]);
                 return EXIT_FAILURE;
         }
     }
@@ -164,12 +153,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "No .csv files found in directory %s\n", directory);
         return 1;
     }
-    // Get the process ID and the CPU it is running on    
+
     pid_t pid = getpid();
     int cpu = sched_getcpu();
     printf("Process %d is running on CPU %d\n", pid, cpu);
-    
-
 
     gettimeofday(&start, NULL);
     local_time = localtime(&start.tv_sec);
@@ -206,7 +193,7 @@ int main(int argc, char *argv[]) {
     printf("The program ended at %s.%06ld\n", time_str_end, end.tv_usec);
 
     double elapsed_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
-    printf("The time used to read %d files is: %f seconds.\n", num_files, elapsed_time);
+    printf("The total time used to read %d files is: %f seconds.\n", num_files, elapsed_time);
 
     for (int i = 0; i < num_files; i++) {
         free(filenames[i]);
