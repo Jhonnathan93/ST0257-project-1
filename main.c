@@ -53,44 +53,43 @@ void read_file(const char *filename, int is_main_process) {
     clock_t start, end;
     double cpu_time_used;
 
-    for (int i = 0; i < 10; i++) {
-        FILE *file = fopen(filename, "r");
-        if (!file) {
-            fprintf(stderr, "Could not open file %s\n", filename);
-            exit(1);
-        }
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        fprintf(stderr, "Could not open file %s\n", filename);
+        exit(1);
+    }
 
-        fseek(file, 0, SEEK_END);
-        long file_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
-        char *file_content = (char *)malloc(file_size + 1);
-        if (!file_content) {
-            fprintf(stderr, "Memory allocation failed for file %s\n", filename);
-            fclose(file);
-            exit(1);
-        }
+    char *file_content = (char *)malloc(file_size + 1);
+    if (!file_content) {
+        fprintf(stderr, "Memory allocation failed for file %s\n", filename);
+        fclose(file);
+        exit(1);
+    }
 
-        start = clock();
+    start = clock();
 
-        size_t read_size = fread(file_content, 1, file_size, file);
-        if (read_size != file_size) {
-            fprintf(stderr, "File read failed for file %s\n", filename);
-            free(file_content);
-            fclose(file);
-            exit(1);
-        }
-
-        file_content[file_size] = '\0';
-
-        end = clock();
-
-        cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-        printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n", filename, file_size, cpu_time_used);
-
+    size_t read_size = fread(file_content, 1, file_size, file);
+    if (read_size != file_size) {
+        fprintf(stderr, "File read failed for file %s\n", filename);
         free(file_content);
         fclose(file);
+        exit(1);
     }
+
+    file_content[file_size] = '\0';
+
+    end = clock();
+
+    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n", filename, file_size, cpu_time_used);
+
+    free(file_content);
+    fclose(file);
+
     if (!is_main_process) {
         exit(0);
     }
