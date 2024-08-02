@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sched.h>
 #include <getopt.h>
+#include <libgen.h>
 
 char **get_csv_file_list(const char *directory, int *num_files) {
     struct dirent *entry;
