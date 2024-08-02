@@ -63,10 +63,14 @@ void read_file(const char *filename, int is_main_process) {
         char *file_content = (char *)malloc(file_size + 1);
         if (!file_content) {
             fprintf(stderr, "Memory allocation failed for file %s\n", filename);
+            // free(file_content);
             fclose(file);
             exit(1);
         }
 
+    // file_content[file_size] = '\0';
+    // free(file_content);
+    // fclose(file);
 
 
     // start = clock();
