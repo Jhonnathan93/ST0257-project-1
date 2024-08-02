@@ -146,8 +146,15 @@ int main(int argc, char *argv[]) {
     }
 
     if (!directory) {
-        fprintf(stderr, "Error: Directory not specified.\n");
-        return EXIT_FAILURE;
+        char exe_path[1024];
+        ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+        if (len == -1) {
+            perror("readlink");
+            return EXIT_FAILURE;
+        }
+        exe_path[len] = '\0';
+        directory = dirname(exe_path);
+        printf("No directory specified. Using current executable directory: %s\n", directory);
     }
 
     int num_files;
