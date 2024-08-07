@@ -11,6 +11,7 @@
 #include <sched.h>
 #include <getopt.h>
 #include <libgen.h>
+#include <errno.h>
 
 char **get_csv_file_list(const char *directory, int *num_files) {
     struct dirent *entry;
@@ -27,7 +28,21 @@ char **get_csv_file_list(const char *directory, int *num_files) {
             const char *ext = strrchr(entry->d_name, '.');
             if (ext && strcmp(ext, ".csv") == 0) {
                 file_list = realloc(file_list, (*num_files + 1) * sizeof(char *));
+                if (!file_list) {
+                    perror("realloc");
+                    closedir(dp);
+                    return NULL;
+                }
                 file_list[*num_files] = malloc(strlen(directory) + strlen(entry->d_name) + 2);
+                if (!file_list[*num_files]) {
+                    perror("malloc");
+                    for (int i = 0; i < *num_files; i++) {
+                        free(file_list[i]);
+                    }
+                    free(file_list);
+                    closedir(dp);
+                    return NULL;
+                }
                 sprintf(file_list[*num_files], "%s/%s", directory, entry->d_name);
                 (*num_files)++;
             }
@@ -55,8 +70,8 @@ void read_file(const char *filename, int is_main_process) {
 
     FILE *file = fopen(filename, "r");
     if (!file) {
-        fprintf(stderr, "Could not open file %s\n", filename);
-        exit(1);
+        fprintf(stderr, "Could not open file %s: %s\n", filename, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 
     fseek(file, 0, SEEK_END);
@@ -67,7 +82,7 @@ void read_file(const char *filename, int is_main_process) {
     if (!file_content) {
         fprintf(stderr, "Memory allocation failed for file %s\n", filename);
         fclose(file);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     start = clock();
@@ -77,7 +92,7 @@ void read_file(const char *filename, int is_main_process) {
         fprintf(stderr, "File read failed for file %s\n", filename);
         free(file_content);
         fclose(file);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     file_content[file_size] = '\0';
