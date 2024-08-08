@@ -1,10 +1,8 @@
 import os
-import pandas as pd
-import csv
-from multiprocessing import Process, Manager
-from datetime import datetime, timedelta
 import time
 import argparse
+from datetime import datetime
+from multiprocessing import Process, Manager
 from rich.console import Console
 from rich.table import Table
 
