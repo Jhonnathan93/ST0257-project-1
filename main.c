@@ -12,6 +12,14 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <errno.h>
+#include <sys/mman.h>  // Para memoria compartida
+
+typedef struct {
+    struct timeval start_time;
+    struct timeval end_time;
+    double duration;
+    char filename[256];
+} FileTiming;
 
 char **get_csv_file_list(const char *directory, int *num_files) {
     struct dirent *entry;
@@ -64,10 +72,7 @@ void set_cpu_affinity(int cpu) {
     }
 }
 
-void read_file(const char *filename, int is_main_process) {
-    clock_t start, end;
-    double cpu_time_used;
-
+void read_file(const char *filename, int is_main_process, FileTiming *timing) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         fprintf(stderr, "Could not open file %s: %s\n", filename, strerror(errno));
@@ -85,7 +90,7 @@ void read_file(const char *filename, int is_main_process) {
         exit(EXIT_FAILURE);
     }
 
-    start = clock();
+    gettimeofday(&timing->start_time, NULL); // Tiempo de inicio
 
     size_t read_size = fread(file_content, 1, file_size, file);
     if (read_size != file_size) {
@@ -95,18 +100,18 @@ void read_file(const char *filename, int is_main_process) {
         exit(EXIT_FAILURE);
     }
 
-    file_content[file_size] = '\0';
+    gettimeofday(&timing->end_time, NULL); // Tiempo de fin
 
-    end = clock();
+    timing->duration = (timing->end_time.tv_sec - timing->start_time.tv_sec) +
+                       (timing->end_time.tv_usec - timing->start_time.tv_usec) / 1e6;
 
-    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n", filename, file_size, cpu_time_used);
+    snprintf(timing->filename, sizeof(timing->filename), "%s", filename);
 
     free(file_content);
     fclose(file);
 
     if (!is_main_process) {
-        exit(0);
+        exit(0);  // El proceso hijo termina aquí
     }
 }
 
@@ -161,6 +166,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Crear un área de memoria compartida para FileTiming
+    FileTiming *timings = mmap(NULL, num_files * sizeof(FileTiming), PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (timings == MAP_FAILED) {
+        perror("mmap");
+        exit(EXIT_FAILURE);
+    }
+
     pid_t pid = getpid();
     int cpu = sched_getcpu();
     printf("Process %d is running on CPU %d\n", pid, cpu);
@@ -181,7 +194,7 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Fork failed for file %s\n", filenames[i]);
                 return 1;
             } else if (pid == 0) {
-                read_file(filenames[i], 0);
+                read_file(filenames[i], 0, &timings[i]);
             }
         }
 
@@ -190,7 +203,7 @@ int main(int argc, char *argv[]) {
         }
     } else {
         for (int i = 0; i < num_files; i++) {
-            read_file(filenames[i], 1);
+            read_file(filenames[i], 1, &timings[i]);
         }
     }
 
@@ -202,6 +215,22 @@ int main(int argc, char *argv[]) {
     double elapsed_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
     printf("The total time used to read %d files is: %f seconds.\n", num_files, elapsed_time);
 
+    // Mostrar la tabla resumen
+    printf("\nFilename\t\t\tStart Time\t\tEnd Time\t\tDuration (s)\n");
+    printf("-------------------------------------------------------------------------------\n");
+    for (int i = 0; i < num_files; i++) {
+        struct tm *start_tm = localtime(&timings[i].start_time.tv_sec);
+        struct tm *end_tm = localtime(&timings[i].end_time.tv_sec);
+        char start_str[64], end_str[64];
+        strftime(start_str, sizeof(start_str), "%H:%M:%S", start_tm);
+        strftime(end_str, sizeof(end_str), "%H:%M:%S", end_tm);
+        printf("%s\t%s.%06ld\t%s.%06ld\t%f\n", timings[i].filename, start_str, timings[i].start_time.tv_usec, end_str, timings[i].end_time.tv_usec, timings[i].duration);
+    }
+
+    // Liberar memoria compartida
+    munmap(timings, num_files * sizeof(FileTiming));
+
+    // Liberar otros recursos
     for (int i = 0; i < num_files; i++) {
         free(filenames[i]);
     }
