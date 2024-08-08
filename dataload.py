@@ -45,10 +45,9 @@ def buscar_archivos_csv(directorio, extension='.csv'):
         ["fork/JPvideos.csv", "fork/USvideos.csv", ... , "sistemas/MXvideos.csv"]
     """
     archivos_csv = []
-    for raiz, _, archivos in os.walk(directorio):
-        for archivo in archivos:
-            if archivo.endswith(extension):
-                archivos_csv.append(os.path.join(raiz, archivo))
+    for archivo in os.listdir(directorio):
+        if archivo.endswith(extension):
+            archivos_csv.append(os.path.join(directorio, archivo))
     return archivos_csv
 
 def set_cpu_affinity(cpu_id):
