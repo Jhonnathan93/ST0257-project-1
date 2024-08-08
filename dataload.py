@@ -101,7 +101,7 @@ def show_results(durations, total_time, log_messages):
 
 def main():
     
-    parser = argparse.ArgumentParser(description="Nose")
+    parser = argparse.ArgumentParser(description="Options to read files")
 
     parser.add_argument('-s', '--single', action='store_true', help="Single mode.")
     parser.add_argument('-m', '--multi', action='store_true', help='Multi mode.')
@@ -153,7 +153,7 @@ def main():
         # print(f"Files started loading at {start_time_first_file.strftime('%H:%M:%S')}")
         # Create and start a process for each CSV file
         for file_path in csv_files:
-            process = Process(target=read_csv, args=(file_path,))
+            process = Process(target=measure_time, args=(file_path, durations))
             processes.append(process)
             process.start()
         
