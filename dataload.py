@@ -5,7 +5,8 @@ from multiprocessing import Process, Manager
 from datetime import datetime, timedelta
 import time
 import argparse
-
+from rich.console import Console
+from rich.table import Table
 
 def get_cpu_core(pid):
     
@@ -57,12 +58,46 @@ def read_csv(file_path):
     
     # if cpu_core is not None:
     #    print(f"El proceso {pid} se está ejecutando en el núcleo {cpu_core}.")
-    inicio = time.time()
+    """inicio = time.time()
     file = open(file_path, errors='ignore')
     file.read()
     # df = pd.read_csv(file_path, encoding='utf-8', encoding_errors='ignore')
     fin = time.time()
-    print(f"El tiempo utilizado para leer el archivo {file_path} fue: {fin - inicio}")
+    print(f"El tiempo utilizado para leer el archivo {file_path} fue: {fin - inicio}")"""
+
+    file = open(file_path, errors='ignore')
+    file.read()
+
+def measure_time(file_path, durations):
+    start_time = time.time()
+    read_csv(file_path)
+    end_time = time.time()
+    duration = end_time - start_time
+    durations.append((file_path, start_time, end_time, duration))    
+
+def show_results(durations, total_time, log_messages):
+    # Printing summary with Rich library
+    console = Console()
+    
+    for message in log_messages:
+        console.print(message)
+    
+    table = Table(title="Resumen de Tiempos de Carga")
+
+    table.add_column("Archivo", justify="left", style="cyan")
+    table.add_column("Hora de inicio", justify="left", style="magenta")
+    table.add_column("Hora de fin", justify="left", style="green")
+    table.add_column("Duración", justify="right", style="red")
+
+    for file_path, start_time, end_time, duration in durations:
+        start_time_str = datetime.fromtimestamp(start_time).strftime('%H:%M:%S')
+        end_time_str = datetime.fromtimestamp(end_time).strftime('%H:%M:%S')
+        duration_str = f"{duration:.6f} segundos"
+        table.add_row(file_path, start_time_str, end_time_str, duration_str)
+
+    console.print(table)
+    
+    console.print(f"[bold yellow]Tiempo total del programa: {total_time:.8f}  segundos[/bold yellow]")
 
 def main():
     
@@ -73,7 +108,6 @@ def main():
     parser.add_argument('-f', '--folder', type=str, action='store')
 
     args = parser.parse_args()
-
     folder = args.folder
     
     if args.single and args.multi:
@@ -94,9 +128,12 @@ def main():
 
     pid = os.getpid()
     cpu_core = get_cpu_core(pid)
-    if cpu_core is not None:
-        print(f"El proceso {pid} se está ejecutando en el núcleo {cpu_core}.")
+    #if cpu_core is not None:
+        #print(f"El proceso {pid} se está ejecutando en el núcleo {cpu_core}.")
 
+    manager = Manager()
+    durations = manager.list()
+    log_messages = []
 
     # Manager to share data between processes
     if args.multi or args.single:
@@ -108,18 +145,17 @@ def main():
 
         # start_time_program = datetime.now()
         start_time_program = time.time()
+        log_messages.append(f"[bold yellow]Hora de inicio del programa: {datetime.fromtimestamp(start_time_program).strftime('%H:%M:%S')}[/bold yellow]")
         # print(f"Program started at {start_time_program.strftime('%H:%M:%S')}")
         # start_time_first_file = datetime.now()
         start_time_first_file = time.time()
+        log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
         # print(f"Files started loading at {start_time_first_file.strftime('%H:%M:%S')}")
         # Create and start a process for each CSV file
         for file_path in csv_files:
             process = Process(target=read_csv, args=(file_path,))
             processes.append(process)
-
             process.start()
-        
-
         
         # Wait for all processes to complete
         for process in processes:
@@ -133,26 +169,26 @@ def main():
         end_time_program = time.time()
         total_time = end_time_program - start_time_program
         # total_seconds = int(total_time.total_seconds())
-        minutes, seconds = divmod(total_time, 60)
-        print(f"Program ended in {minutes:02}:{seconds:02} seconds")
+        # minutes, seconds = divmod(total_time, 60)
+        # print(f"Program ended in {minutes:02}:{seconds:02} seconds")
     else:
-        start_time_program = datetime.now()
-        print(f"Program started at {start_time_program.strftime('%H:%M:%S')}")
-        start_time_first_file = datetime.now()
-        print(f"Files started loading at {start_time_first_file.strftime('%H:%M:%S')}")
-
+        start_time_program = time.time()
+        log_messages.append(f"[bold yellow]Hora de inicio del programa: {datetime.fromtimestamp(start_time_program).strftime('%H:%M:%S')}[/bold yellow]")
+        
+        start_time_first_file = time.time()
+        log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
 
         for file in csv_files:
-            read_csv(file)
+            measure_time(file, durations)
         
-        end_time_last_file = datetime.now()
-        print(f"Files finished loading at {end_time_last_file.strftime('%H:%M:%S')}")
-        end_time_program = datetime.now()
+        end_time_last_file = time.time()
+        log_messages.append(f"[bold yellow]Hora de finalización de la carga del último archivo: {datetime.fromtimestamp(end_time_last_file).strftime('%H:%M:%S')}[/bold yellow]")
         
+        end_time_program = time.time()
         total_time = end_time_program - start_time_program
-        # total_seconds = int(total_time.total_seconds())
-        print(f"Program ended in {total_time} seconds")
 
+    show_results(durations, total_time, log_messages)
+    
     return 0
     
 
