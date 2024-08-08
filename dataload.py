@@ -122,9 +122,9 @@ def main():
     parser = argparse.ArgumentParser(description="Options to read files")
     parser.add_argument('-s', '--single', action='store_true', help="Single mode.")
     parser.add_argument('-m', '--multi', action='store_true', help='Multi mode.')
-    parser.add_argument('-f', '--folder', type=str, required=True, help='Folder to search for CSV files.')
+    parser.add_argument('-f', '--folder', type=str, help='Folder to search for CSV files.')
     args = parser.parse_args()
-    folder = args.folder
+    folder = args.folder if args.folder else os.getcwd()
     
     if args.single and args.multi:
         print("You can't set two flags at the same time (python dataload.py -s -m -f FOLDER)")
