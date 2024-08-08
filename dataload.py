@@ -151,36 +151,9 @@ def main():
     log_messages.append(f"[bold yellow]Hora de inicio del programa: {datetime.fromtimestamp(start_time_program).strftime('%H:%M:%S')}[/bold yellow]")
 
     processes = []
-    if args.single:
-        set_cpu_affinity(cpu_core)
 
-    start_time_first_file = time.time()
-    log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
-
-    for file_path in csv_files:
-        if args.multi or args.single:
-            process = Process(target=measure_time, args=(file_path, durations))
-            processes.append(process)
-            process.start()
-        else:
-            measure_time(file_path, durations)
-
-    for process in processes:
-        process.join()
-
-    end_time_last_file = time.time()
-    log_messages.append(f"[bold yellow]Hora de finalización de la carga del último archivo: {datetime.fromtimestamp(end_time_last_file).strftime('%H:%M:%S')}[/bold yellow]")
-
-    end_time_program = time.time()
-    total_time = end_time_program - start_time_program
-
-    show_results(durations, total_time, log_messages)
-    return 0
-
-if __name__ == '__main__':
-    main()
-
-    """
+    #here
+    
     if args.multi or args.single:
         processes = []
         
@@ -235,4 +208,35 @@ if __name__ == '__main__':
     show_results(durations, total_time, log_messages)
     
     return 0
-    """    
+       
+    #here
+    """
+    if args.single:
+        set_cpu_affinity(cpu_core)
+
+    start_time_first_file = time.time()
+    log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
+
+    for file_path in csv_files:
+        if args.multi or args.single:
+            process = Process(target=measure_time, args=(file_path, durations))
+            processes.append(process)
+            process.start()
+        else:
+            measure_time(file_path, durations)
+
+    for process in processes:
+        process.join()
+
+    end_time_last_file = time.time()
+    log_messages.append(f"[bold yellow]Hora de finalización de la carga del último archivo: {datetime.fromtimestamp(end_time_last_file).strftime('%H:%M:%S')}[/bold yellow]")
+
+    end_time_program = time.time()
+    total_time = end_time_program - start_time_program
+
+    show_results(durations, total_time, log_messages)
+    return 0
+    """
+
+if __name__ == '__main__':
+    main()
