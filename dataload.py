@@ -9,7 +9,16 @@ from rich.console import Console
 from rich.table import Table
 
 def get_cpu_core(pid):
-    
+    """
+    Obtiene el núcleo de la CPU en el que se está ejecutando un proceso.
+
+    Args:
+        pid (int): ID del proceso del cual se quiere conocer el núcleo de la CPU.
+
+    Returns:
+        int: Número del núcleo de la CPU.
+        None: Si no se encuentra el proceso o hay un error.
+    """
     try:
         with open(f'/proc/{pid}/stat') as f:
             fields = f.read().split()
@@ -22,14 +31,13 @@ def get_cpu_core(pid):
         print(f"Error al leer el núcleo de la CPU para el proceso {pid}: {e}")
         return None
 
-
 def buscar_archivos_csv(directorio, extension='.csv'):
     """
     Función creada para buscar archivos con extensión .csv en un directorio
     especificado, esto mediante el uso de la librería OS.
 
     Args:
-        directorio (str): String correspondiente al directorio en el que debemos hacer la busqueda de los archivos.
+        directorio (str): String correspondiente al directorio en el que debemos hacer la búsqueda de los archivos.
         extension (str | Opcional): Por defecto la extensión que usamos es para archivos .csv unicamente, en caso de que se pida realizar con archivos .txt o demás formatos de texto se podría cambiar este
         parametro.
     Returns:
@@ -46,39 +54,49 @@ def buscar_archivos_csv(directorio, extension='.csv'):
     return archivos_csv
 
 def set_cpu_affinity(cpu_id):
-    """ Set the CPU affinity for the current process to a specific CPU. """
+    """
+    Establece la afinidad de la CPU para el proceso actual a una CPU específica.
+
+    Args:
+        cpu_id (int): Número de la CPU a la cual se quiere asignar el proceso.
+    """
     pid = os.getpid()
     os.sched_setaffinity(pid, {cpu_id})
 
 def read_csv(file_path):
-    """ Function to read a CSV file. """
-    
-    # pid = os.getpid()
-    # cpu_core = get_cpu_core(pid)
-    
-    # if cpu_core is not None:
-    #    print(f"El proceso {pid} se está ejecutando en el núcleo {cpu_core}.")
-    """inicio = time.time()
-    file = open(file_path, errors='ignore')
-    file.read()
-    # df = pd.read_csv(file_path, encoding='utf-8', encoding_errors='ignore')
-    fin = time.time()
-    print(f"El tiempo utilizado para leer el archivo {file_path} fue: {fin - inicio}")"""
+    """
+    Función para leer un archivo CSV.
 
-    file = open(file_path, errors='ignore')
-    file.read()
+    Args:
+        file_path (str): Ruta del archivo CSV a leer.
+    """
+    with open(file_path, errors='ignore') as file:
+        file.read()
 
 def measure_time(file_path, durations):
+    """
+    Mide el tiempo que se tarda en leer un archivo CSV y lo guarda en una lista compartida.
+
+    Args:
+        file_path (str): Ruta del archivo CSV a leer.
+        durations (list): Lista compartida en la cual se almacenarán los tiempos de lectura.
+    """
     start_time = time.time()
     read_csv(file_path)
     end_time = time.time()
     duration = end_time - start_time
-    durations.append((file_path, start_time, end_time, duration))    
+    durations.append((file_path, start_time, end_time, duration))
 
 def show_results(durations, total_time, log_messages):
-    # Printing summary with Rich library
-    console = Console()
-    
+    """
+    Muestra los resultados usando la librería rich.
+
+    Args:
+        durations (list): Lista de duraciones de lectura de archivos CSV.
+        total_time (float): Tiempo total que tomó la ejecución del programa.
+        log_messages (list): Lista de mensajes de log a mostrar.
+    """
+    console = Console()    
     for message in log_messages:
         console.print(message)
     
@@ -96,17 +114,17 @@ def show_results(durations, total_time, log_messages):
         table.add_row(file_path, start_time_str, end_time_str, duration_str)
 
     console.print(table)
-    
     console.print(f"[bold yellow]Tiempo total del programa: {total_time:.8f}  segundos[/bold yellow]")
 
 def main():
-    
+    """
+    Función principal que controla el flujo del programa. Lee argumentos de línea de comandos,
+    busca archivos CSV, mide los tiempos de lectura y muestra los resultados.
+    """
     parser = argparse.ArgumentParser(description="Options to read files")
-
     parser.add_argument('-s', '--single', action='store_true', help="Single mode.")
     parser.add_argument('-m', '--multi', action='store_true', help='Multi mode.')
-    parser.add_argument('-f', '--folder', type=str, action='store')
-
+    parser.add_argument('-f', '--folder', type=str, required=True, help='Folder to search for CSV files.')
     args = parser.parse_args()
     folder = args.folder
     
@@ -114,28 +132,58 @@ def main():
         print("You can't set two flags at the same time (python dataload.py -s -m -f FOLDER)")
         return 1
 
-    # Verify if FOLDER exists
     if not os.path.isdir(folder):
         print(f"Directory '{folder}' does not exist.")
         return 1
     
-    # Get a list of all CSV files in the directory
     csv_files = buscar_archivos_csv(folder)
-    
     if not csv_files:
         print(f"No CSV files found in directory '{folder}'.")
         return 1
 
     pid = os.getpid()
     cpu_core = get_cpu_core(pid)
-    #if cpu_core is not None:
-        #print(f"El proceso {pid} se está ejecutando en el núcleo {cpu_core}.")
+    if cpu_core is not None:
+        print(f"Process {pid} is running on CPU core {cpu_core}.")
 
     manager = Manager()
     durations = manager.list()
     log_messages = []
 
-    # Manager to share data between processes
+    start_time_program = time.time()
+    log_messages.append(f"[bold yellow]Hora de inicio del programa: {datetime.fromtimestamp(start_time_program).strftime('%H:%M:%S')}[/bold yellow]")
+
+    processes = []
+    if args.single:
+        set_cpu_affinity(cpu_core)
+
+    start_time_first_file = time.time()
+    log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
+
+    for file_path in csv_files:
+        if args.multi or args.single:
+            process = Process(target=measure_time, args=(file_path, durations))
+            processes.append(process)
+            process.start()
+        else:
+            measure_time(file_path, durations)
+
+    for process in processes:
+        process.join()
+
+    end_time_last_file = time.time()
+    log_messages.append(f"[bold yellow]Hora de finalización de la carga del último archivo: {datetime.fromtimestamp(end_time_last_file).strftime('%H:%M:%S')}[/bold yellow]")
+
+    end_time_program = time.time()
+    total_time = end_time_program - start_time_program
+
+    show_results(durations, total_time, log_messages)
+    return 0
+
+if __name__ == '__main__':
+    main()
+
+    """
     if args.multi or args.single:
         processes = []
         
@@ -190,7 +238,4 @@ def main():
     show_results(durations, total_time, log_messages)
     
     return 0
-    
-
-if __name__ == '__main__':
-    print('Return',main())
+    """    
