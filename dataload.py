@@ -1,8 +1,8 @@
 import os
-import csv
-from multiprocessing import Process
+from multiprocessing import Process, current_process
 import time
 import argparse
+import psutil
 
 # Constante que define el tamaño de página en bytes (4 KB)
 PAGE_SIZE = 4096
@@ -28,10 +28,9 @@ def buscar_archivos_csv(directorio, extension='.csv'):
     Busca archivos con extensión .csv en un directorio especificado.
     """
     archivos_csv = []
-    for raiz, _, archivos in os.walk(directorio):
-        for archivo in archivos:
-            if archivo.endswith(extension):
-                archivos_csv.append(os.path.join(raiz, archivo))
+    for archivo in os.listdir(directorio):
+        if archivo.endswith(extension):
+            archivos_csv.append(os.path.join(directorio, archivo))
     return archivos_csv
 
 def set_cpu_affinity(cpu_id):
@@ -40,15 +39,30 @@ def set_cpu_affinity(cpu_id):
     """
     pid = os.getpid()
     os.sched_setaffinity(pid, {cpu_id})
-    
+
+def get_memory_usage(pid):
+    """
+    Obtiene el uso de memoria de un proceso en KB.
+    """
+    process = psutil.Process(pid)
+    memory_info = process.memory_info()
+    return memory_info.rss // 1024  # Retorna la memoria en KB
+
 def read_csv(file_path):
     """
-    Función para leer un archivo CSV simulando paginación.
+    Función para leer un archivo CSV simulando paginación y almacenar las páginas en una lista.
     """
-    inicio = time.time()
-    
+    pid = os.getpid()
+    cpu_core = get_cpu_core(pid)
+    memory_usage_start = get_memory_usage(pid)
+
+    start_time = time.time()
+
+    # Lista para almacenar todas las "páginas" del archivo
+    pages = []
+
     # Abrir el archivo
-    with open(file_path, errors='ignore') as file:
+    with open(file_path, 'rb') as file:
         page_number = 0
         while True:
             # Leer un fragmento de PAGE_SIZE (4096 bytes)
@@ -57,11 +71,18 @@ def read_csv(file_path):
                 break  # Salir si no queda más contenido por leer
 
             # Simular almacenamiento en "página"
-            print(f"Archivo: {file_path}, Página: {page_number}, Bytes leídos: {len(page)}")
+            pages.append(page)
             page_number += 1
-    
-    fin = time.time()
-    print(f"El tiempo utilizado para leer el archivo {file_path} fue: {fin - inicio} segundos")
+
+    end_time = time.time()
+    memory_usage_end = get_memory_usage(pid)
+
+    elapsed_time = (end_time - start_time) * 1000  # Convertir a milisegundos
+
+    # Formatear la salida en forma de tabla
+    print(f"{pid:<10} {cpu_core:<5} {os.path.basename(file_path):<20} {page_number:<10} {elapsed_time:<20.6f} {memory_usage_start:<15} {memory_usage_end:<15}")
+
+    return pages
 
 def main():
     """
@@ -100,8 +121,10 @@ def main():
     if args.single:
         set_cpu_affinity(cpu_core)
 
+    # Imprimir encabezados de la tabla
+    print(f"{'PID':<10} {'Core':<5} {'File':<20} {'Pages':<10} {'Time (ms)':<20} {'Mem Start (KB)':<15} {'Mem End (KB)':<15}")
+
     start_time_program = time.time()
-    start_time_first_file = time.time()
 
     for file_path in csv_files:
         process = Process(target=read_csv, args=(file_path,))
@@ -110,9 +133,6 @@ def main():
 
     for process in processes:
         process.join()
-
-    end_time_last_file = time.time()
-    print(f"Archivos terminados de cargar en {end_time_last_file - start_time_first_file} segundos")
 
     end_time_program = time.time()
     total_time = end_time_program - start_time_program
