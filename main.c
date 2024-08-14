@@ -9,10 +9,18 @@
 #include <dirent.h>
 #include <string.h>
 #include <sched.h>
-#include <getopt.h>
-#include <libgen.h>
 #include <errno.h>
+#include <getopt.h>
 
+#define PAGE_SIZE 4096 // Tamaño de la página en bytes
+
+// Estructura para representar una página de datos
+typedef struct Page {
+    char *data;
+    size_t size;
+} Page;
+
+// Función para obtener la lista de archivos .csv en un directorio
 char **get_csv_file_list(const char *directory, int *num_files) {
     struct dirent *entry;
     DIR *dp = opendir(directory);
@@ -28,18 +36,14 @@ char **get_csv_file_list(const char *directory, int *num_files) {
             const char *ext = strrchr(entry->d_name, '.');
             if (ext && strcmp(ext, ".csv") == 0) {
                 file_list = realloc(file_list, (*num_files + 1) * sizeof(char *));
-                if (!file_list) {
+                if (file_list == NULL) {
                     perror("realloc");
                     closedir(dp);
                     return NULL;
                 }
                 file_list[*num_files] = malloc(strlen(directory) + strlen(entry->d_name) + 2);
-                if (!file_list[*num_files]) {
+                if (file_list[*num_files] == NULL) {
                     perror("malloc");
-                    for (int i = 0; i < *num_files; i++) {
-                        free(file_list[i]);
-                    }
-                    free(file_list);
                     closedir(dp);
                     return NULL;
                 }
@@ -52,6 +56,7 @@ char **get_csv_file_list(const char *directory, int *num_files) {
     return file_list;
 }
 
+// Función para establecer la afinidad de CPU para un proceso
 void set_cpu_affinity(int cpu) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -64,50 +69,106 @@ void set_cpu_affinity(int cpu) {
     }
 }
 
+// Función para obtener el uso de memoria de un proceso en KB
+long get_memory_usage(pid_t pid) {
+    char statm_path[256];
+    sprintf(statm_path, "/proc/%d/statm", pid);
+
+    FILE *file = fopen(statm_path, "r");
+    if (!file) {
+        perror("fopen");
+        return -1;
+    }
+
+    long size;
+    if (fscanf(file, "%ld", &size) != 1) {
+        perror("fscanf");
+        fclose(file);
+        return -1;
+    }
+
+    fclose(file);
+    return size * sysconf(_SC_PAGESIZE) / 1024; // Convert to KB
+}
+
+// Función para leer un archivo en páginas
 void read_file(const char *filename, int is_main_process) {
-    
-    clock_t start, end;
-    double cpu_time_used;
-    
+    pid_t pid = getpid();
+    int cpu = sched_getcpu();  // Obtener el core donde se está ejecutando el proceso
+
+    long memory_usage_start = get_memory_usage(pid);
+    if (memory_usage_start == -1) {
+        fprintf(stderr, "Could not get memory usage for process %d\n", pid);
+    }
+
+    struct timeval file_start, file_end;
+    gettimeofday(&file_start, NULL);
+
     FILE *file = fopen(filename, "r");
     if (!file) {
         fprintf(stderr, "Could not open file %s: %s\n", filename, strerror(errno));
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    char *file_content = (char *)malloc(file_size + 1);
-    if (!file_content) {
+    size_t num_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    Page *pages = (Page *)malloc(num_pages * sizeof(Page));
+    if (!pages) {
         fprintf(stderr, "Memory allocation failed for file %s\n", filename);
         fclose(file);
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
-    start = clock();
-
-    size_t read_size = fread(file_content, 1, file_size, file);
-    if (read_size != file_size) {
-        fprintf(stderr, "File read failed for file %s\n", filename);
-        free(file_content);
-        fclose(file);
-        exit(EXIT_FAILURE);
+    for (size_t i = 0; i < num_pages; ++i) {
+        pages[i].data = (char *)malloc(PAGE_SIZE);
+        pages[i].size = 0;
+        if (!pages[i].data) {
+            fprintf(stderr, "Memory allocation failed for page %zu\n", i);
+            for (size_t j = 0; j < i; ++j) {
+                free(pages[j].data);
+            }
+            free(pages);
+            fclose(file);
+            exit(1);
+        }
     }
 
-    file_content[file_size] = '\0';
+    size_t read_size;
+    for (size_t i = 0; i < num_pages; ++i) {
+        read_size = fread(pages[i].data, 1, PAGE_SIZE, file);
+        pages[i].size = read_size;
+        if (read_size < PAGE_SIZE && ferror(file)) {
+            fprintf(stderr, "File read failed for file %s: %s\n", filename, strerror(errno));
+            for (size_t j = 0; j < num_pages; ++j) {
+                free(pages[j].data);
+            }
+            free(pages);
+            fclose(file);
+            exit(1);
+        }
+    }
 
-    end = clock();
+    long memory_usage_end = get_memory_usage(pid);
 
-    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Read the file, The number of chars in file %s is: %ld and time used is: %f seconds.\n", filename, file_size, cpu_time_used);    
+    gettimeofday(&file_end, NULL);
+    double elapsed_time = ((file_end.tv_sec - file_start.tv_sec) * 1000.0) + ((file_end.tv_usec - file_start.tv_usec) / 1000.0);
 
-    free(file_content);
+    // Imprimir la información en una sola línea con formato de tabla, incluyendo el core
+    printf("%-10d %-5d %-20s %-10zu %-20.6f %-15ld %-15ld\n", pid, cpu, filename, num_pages, elapsed_time, memory_usage_start, memory_usage_end);
+
+    for (size_t i = 0; i < num_pages; ++i) {
+        free(pages[i].data);
+    }
+
+    free(pages);
     fclose(file);
 
     if (!is_main_process) {
-        exit(0);  // El proceso hijo termina aquí
+        exit(0);
     }
 }
 
@@ -121,6 +182,7 @@ int main(int argc, char *argv[]) {
     int multi = 0;
     int opt;
 
+    // Manejo de los argumentos de línea de comandos
     while ((opt = getopt(argc, argv, "smf:")) != -1) {
         switch (opt) {
             case 's':
@@ -133,7 +195,6 @@ int main(int argc, char *argv[]) {
                 directory = optarg;
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-s | -m] [-f <folder>]\n", argv[0]);
                 return EXIT_FAILURE;
         }
     }
@@ -143,16 +204,8 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    if (!directory) {
-        char exe_path[1024];
-        ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-        if (len == -1) {
-            perror("readlink");
-            return EXIT_FAILURE;
-        }
-        exe_path[len] = '\0';
-        directory = dirname(exe_path);
-        printf("No directory specified. Using current executable directory: %s\n", directory);
+    if (directory == NULL) {
+        directory = ".";  // Usar el directorio actual si no se especifica uno
     }
 
     int num_files;
@@ -164,22 +217,24 @@ int main(int argc, char *argv[]) {
 
     pid_t pid = getpid();
     int cpu = sched_getcpu();
-    printf("Process %d is running on CPU %d\n", pid, cpu);
+    printf("Main process %d is running on CPU %d\n", pid, cpu);
 
     gettimeofday(&start, NULL);
     local_time = localtime(&start.tv_sec);
     strftime(time_str_start, sizeof(time_str_start), "%H:%M:%S", local_time);
     printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);
 
+    // Imprimir encabezados de la tabla
+    printf("%-10s %-5s %-20s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
+
     if (single || multi) {
         if (single) {
             set_cpu_affinity(cpu);
         }
-
         for (int i = 0; i < num_files; i++) {
             pid_t pid = fork();
             if (pid < 0) {
-                fprintf(stderr, "Fork failed for file %s\n", filenames[i]);
+                fprintf(stderr, "Fork failed for file %s: %s\n", filenames[i], strerror(errno));
                 return 1;
             } else if (pid == 0) {
                 read_file(filenames[i], 0);
@@ -200,10 +255,9 @@ int main(int argc, char *argv[]) {
     strftime(time_str_end, sizeof(time_str_end), "%H:%M:%S", local_time);
     printf("The program ended at %s.%06ld\n", time_str_end, end.tv_usec);
 
-    double elapsed_time = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
-    printf("The total time used to read %d files is: %f seconds.\n", num_files, elapsed_time);
+    double elapsed_time = ((end.tv_sec - start.tv_sec) * 1000.0) + ((end.tv_usec - start.tv_usec) / 1000.0);
+    printf("The time used to read %d files is: %f milliseconds.\n", num_files, elapsed_time);
 
-    // Liberar otros recursos
     for (int i = 0; i < num_files; i++) {
         free(filenames[i]);
     }
