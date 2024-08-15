@@ -4,151 +4,164 @@ from datetime import datetime
 import time
 import argparse
 import psutil
-from rich.console import Console
-from rich.table import Table
+
+# Constante que define el tamaño de página en bytes (4 KB)
+PAGE_SIZE = 4096
+
 
 def get_cpu_core(pid):
     return 1
 
+
 def buscar_archivos_csv(directorio, extension='.csv'):
+    """
+    Busca archivos con extensión .csv en un directorio especificado.
+    """
     archivos_csv = []
-    for raiz, _, archivos in os.walk(directorio):
-        for archivo in archivos:
-            if archivo.endswith(extension):
-                archivos_csv.append(os.path.join(raiz, archivo))
+    for archivo in os.listdir(directorio):
+        if archivo.endswith(extension):
+            archivos_csv.append(os.path.join(directorio, archivo))
     return archivos_csv
 
+
 def set_cpu_affinity(cpu_id):
-    #Set the CPU affinity for the current process to a specific CPU.
+    """
+    Establece la afinidad de la CPU para el proceso actual a una CPU específica.
+    """
     p = psutil.Process(os.getpid())
-    p.cpu_affinity([1])
+    p.cpu_affinity([get_cpu_core(os.getpid())])
+
+
+def get_memory_usage(pid):
+    """
+    Obtiene el uso de memoria de un proceso en KB.
+    """
+    process = psutil.Process(pid)
+    memory_info = process.memory_info()
+    return memory_info.rss // 1024  # Retorna la memoria en KB
+
 
 def read_csv(file_path):
-    #Function to read a CSV file.
-    
-    file = open(file_path, errors='ignore')
-    file.read()
-    
-
-def measure_time(file_path, durations):
-    start_time = time.time()
-    read_csv(file_path)
-    end_time = time.time()
-    duration = end_time - start_time
-    durations.append((file_path, start_time, end_time, duration))
-    
-    
-def show_results(durations, total_time, log_messages):
-    # Printing summary with Rich library
-    console = Console()
-    
-    for message in log_messages:
-        console.print(message)
-    
-    table = Table(title="Resumen de Tiempos de Carga")
-
-    table.add_column("Archivo", justify="left", style="cyan")
-    table.add_column("Hora de inicio", justify="left", style="magenta")
-    table.add_column("Hora de fin", justify="left", style="green")
-    table.add_column("Duración", justify="right", style="red")
-
-    for file_path, start_time, end_time, duration in durations:
-        start_time_str = datetime.fromtimestamp(start_time).strftime('%H:%M:%S')
-        end_time_str = datetime.fromtimestamp(end_time).strftime('%H:%M:%S')
-        duration_str = f"{duration:.6f} segundos"
-        table.add_row(file_path, start_time_str, end_time_str, duration_str)
-
-    console.print(table)
-    
-    console.print(f"[bold yellow]Tiempo total del programa: {total_time:.8f}  segundos[/bold yellow]")
-    
-
-def main():
-    parser = argparse.ArgumentParser(description="Options to read files")
-
-    parser.add_argument('-s', '--single', action='store_true', help="Single mode.")
-    parser.add_argument('-m', '--multi', action='store_true', help='Multi mode.')
-    parser.add_argument('-f', '--folder', type=str, action='store')
-
-    args = parser.parse_args()
-    folder = args.folder
-    
-    if args.single and args.multi:
-        print("You can't set two flags at the same time (python dataload.py -s -m -f FOLDER)")
-        return 1
-    
-    # Verify if FOLDER exists
-    if not os.path.isdir(folder):
-        print(f"Directory '{folder}' does not exist.")
-        return 1
-    
-    # Get a list of all CSV files in the directory
-    csv_files = buscar_archivos_csv(folder)
-    
-    if not csv_files:
-        print(f"No CSV files found in directory '{folder}'.")
-        return 1
-    
+    """
+    Función para leer un archivo CSV simulando paginación y almacenar las páginas en una lista.
+    """
     pid = os.getpid()
     cpu_core = get_cpu_core(pid)
-    #if cpu_core is not None:
-        #print(f"El proceso {pid} se está ejecutando en el núcleo {cpu_core}.")
+    memory_usage_start = get_memory_usage(pid)
 
-    # Manager to share data between processes
-    manager = Manager()
-    durations = manager.list()
-    log_messages = []
-    
-    if args.multi or args.single:
-        processes = []
-        
-        if args.single:
-            set_cpu_affinity(cpu_core)
-        
-        start_time_program = time.time()
-        log_messages.append(f"[bold yellow]Hora de inicio del programa: {datetime.fromtimestamp(start_time_program).strftime('%H:%M:%S')}[/bold yellow]")
-        
-        start_time_first_file = time.time()
-        log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
+    start_time = time.time()
 
-        
-        # Create and start a process for each CSV file
-        for file_path in csv_files:
-            process = Process(target=measure_time, args=(file_path, durations))
-            processes.append(process)
-            process.start()
-        
-        # Wait for all processes to complete
-        for process in processes:
-            process.join()
-        
-        end_time_last_file = time.time()
-        log_messages.append(f"[bold yellow]Hora de finalización de la carga del último archivo: {datetime.fromtimestamp(end_time_last_file).strftime('%H:%M:%S')}[/bold yellow]")
-        
-        end_time_program = time.time()
-        total_time = end_time_program - start_time_program
-       
+    # Lista para almacenar todas las "páginas" del archivo
+    pages = []
 
-    else:
-        
-        start_time_program = time.time()
-        log_messages.append(f"[bold yellow]Hora de inicio del programa: {datetime.fromtimestamp(start_time_program).strftime('%H:%M:%S')}[/bold yellow]")
-        
-        start_time_first_file = time.time()
-        log_messages.append(f"[bold yellow]Hora de inicio de la carga del primer archivo: {datetime.fromtimestamp(start_time_first_file).strftime('%H:%M:%S')}[/bold yellow]")
+    # Abrir el archivo
+    with open(file_path, 'rb') as file:
+        page_number = 0
+        while True:
+            # Leer un fragmento de PAGE_SIZE (4096 bytes)
+            page = file.read(PAGE_SIZE)
+            if not page:
+                break  # Salir si no queda más contenido por leer
 
-        for file in csv_files:
-            measure_time(file, durations)
-            
-        end_time_last_file = time.time()
-        log_messages.append(f"[bold yellow]Hora de finalización de la carga del último archivo: {datetime.fromtimestamp(end_time_last_file).strftime('%H:%M:%S')}[/bold yellow]")
-        
-        end_time_program = time.time()
-        total_time = end_time_program - start_time_program
-    
-    show_results(durations, total_time, log_messages)
-    
+            # Simular almacenamiento en "página"
+            pages.append(page)
+            page_number += 1
+
+    end_time = time.time()
+    memory_usage_end = get_memory_usage(pid)
+
+    elapsed_time = (end_time - start_time) * 1000  # Convertir a milisegundos
+
+    # Formatear la salida en forma de tabla
+    print(
+        f"{pid:<10} {cpu_core:<5} {os.path.basename(file_path):<20} {page_number:<10} {elapsed_time:<20.6f} {memory_usage_start:<15} {memory_usage_end:<15}"
+    )
+
+    return pages
+
+
+def main():
+    """
+    Función principal que controla el flujo del programa.
+    """
+    parser = argparse.ArgumentParser(
+        description="Simulación de lectura de archivos CSV con paginación.")
+    parser.add_argument('-s',
+                        '--single',
+                        action='store_true',
+                        help="Single mode.")
+    parser.add_argument('-m',
+                        '--multi',
+                        action='store_true',
+                        help='Multi mode.')
+    parser.add_argument('-f',
+                        '--folder',
+                        type=str,
+                        help='Folder to search for CSV files.')
+
+    args = parser.parse_args()
+    folder = args.folder if args.folder else os.getcwd()
+
+    if args.single and args.multi:
+        print(
+            "Cannot set both flags at the same time (python dataload.py -s -m -f FOLDER)"
+        )
+        return 1
+
+    if not os.path.isdir(folder):
+        print(f"The directory '{folder}' does not exist.")
+        return 1
+
+    # Obtener una lista de todos los archivos CSV en el directorio
+    csv_files = buscar_archivos_csv(folder)
+
+    if not csv_files:
+        print(f"No CSV files were found in the '{folder}' directory.")
+        return 1
+
+    pid = os.getpid()
+    cpu_core = get_cpu_core(pid)
+    if cpu_core is not None:
+        print(f"Process {pid} is running on core {cpu_core}.")
+
+    processes = []
+
+    if args.single:
+        set_cpu_affinity(cpu_core)
+
+    start_time_program = time.time()
+    print(
+        f"The program starts at {time.strftime('%H:%M:%S', time.localtime(start_time_program))}"
+    )
+
+    print(
+        f"{'PID':<10} {'Core':<5} {'File':<20} {'Pages':<10} {'Time (ms)':<20} {'Mem Start (KB)':<15} {'Mem End (KB)':<15}"
+    )
+
+    start_time_first_file = time.time()
+
+    for file_path in csv_files:
+        process = Process(target=read_csv, args=(file_path, ))
+        processes.append(process)
+        process.start()
+
+    for process in processes:
+        process.join()
+
+    end_time_last_file = time.time()
+    print(f"Start time of the first file load: {time.strftime('%H:%M:%S', time.localtime(start_time_first_file))}")
+    print(
+        f"The program ended at {time.strftime('%H:%M:%S', time.localtime(end_time_last_file))}"
+    )
+
+    total_time = end_time_last_file - start_time_program
+    minutes, seconds = divmod(total_time, 60)
+    print(
+        f"The time used to read {len(csv_files)} files is: {minutes:02}:{seconds:06.3f} seconds"
+    )
+
     return 0
+
 
 if __name__ == '__main__':
     print('Return', main())
