@@ -41,8 +41,8 @@ def set_cpu_affinity(cpu_id):
     """
     Establece la afinidad de la CPU para el proceso actual a una CPU específica.
     """
-    pid = os.getpid()
-    os.sched_setaffinity(pid, {cpu_id})
+    p = psutil.Process(os.getpid())
+    p.cpu_affinity([get_cpu_core(os.getpid())])
 
 
 def get_memory_usage(pid):
@@ -134,45 +134,78 @@ def main():
 
     pid = os.getpid()
     cpu_core = get_cpu_core(pid)
-    if cpu_core is not None:
-        print(f"Process {pid} is running on core {cpu_core}.")
+    
+    messages=[]
+    
+    if args.multi or args.single:
+        processes = []
+        
 
-    processes = []
+        if args.single:
+            set_cpu_affinity(cpu_core)
 
-    if args.single:
-        set_cpu_affinity(cpu_core)
+        start_time_program = time.time()
+        messages.append(
+            f"The program starts at {time.strftime('%H:%M:%S', time.localtime(start_time_program))}"
+        )
 
-    start_time_program = time.time()
-    print(
-        f"The program starts at {time.strftime('%H:%M:%S', time.localtime(start_time_program))}"
-    )
+        print(
+            f"{'PID':<10} {'Core':<5} {'File':<20} {'Pages':<10} {'Time (ms)':<20} {'Mem Start (KB)':<15} {'Mem End (KB)':<15}"
+        )
 
-    print(
-        f"{'PID':<10} {'Core':<5} {'File':<20} {'Pages':<10} {'Time (ms)':<20} {'Mem Start (KB)':<15} {'Mem End (KB)':<15}"
-    )
+        start_time_first_file = time.time()
 
-    start_time_first_file = time.time()
+        for file_path in csv_files:
+            process = Process(target=read_csv, args=(file_path, ))
+            processes.append(process)
+            process.start()
 
-    for file_path in csv_files:
-        process = Process(target=read_csv, args=(file_path, ))
-        processes.append(process)
-        process.start()
+        for process in processes:
+            process.join()
 
-    for process in processes:
-        process.join()
+        end_time_last_file = time.time()
+        messages.append(f"Start time of the first file load: {time.strftime('%H:%M:%S', time.localtime(start_time_first_file))}")
+        messages.append(
+            f"The program ended at {time.strftime('%H:%M:%S', time.localtime(end_time_last_file))}"
+        )
 
-    end_time_last_file = time.time()
-    print(f"Start time of the first file load: {time.strftime('%H:%M:%S', time.localtime(start_time_first_file))}")
-    print(
-        f"The program ended at {time.strftime('%H:%M:%S', time.localtime(end_time_last_file))}"
-    )
+        total_time = (end_time_last_file - start_time_program) * 1000
+        
+        messages.append(
+            f"The time used to read {len(csv_files)} files is: {total_time} milliseconds"
+        )
+    else:
+        start_time_program = time.time()
+        messages.append(
+            f"The program starts at {time.strftime('%H:%M:%S', time.localtime(start_time_program))}"
+        )
+        
+        print(
+            f"{'PID':<10} {'Core':<5} {'File':<20} {'Pages':<10} {'Time (ms)':<20} {'Mem Start (KB)':<15} {'Mem End (KB)':<15}"
+        )
 
-    total_time = end_time_last_file - start_time_program
-    minutes, seconds = divmod(total_time, 60)
-    print(
-        f"The time used to read {len(csv_files)} files is: {minutes:02}:{seconds:06.3f} seconds"
-    )
+        start_time_first_file = time.time()
+        messages.append(f"Start time of the first file load: {time.strftime('%H:%M:%S', time.localtime(start_time_first_file))}")
+        
+        for file in csv_files:
+            read_csv(file)
+            
+        end_time_last_file = time.time()
+        messages.append(
+            f"The program ended at {time.strftime('%H:%M:%S', time.localtime(end_time_last_file))}"
+        )
 
+        total_time = (end_time_last_file - start_time_program) * 1000
+        
+        messages.append(
+            f"The time used to read {len(csv_files)} files is: {total_time} milliseconds"
+        )
+
+
+    for message in messages:
+        print(message)
+        
+        
     return 0
 
 
