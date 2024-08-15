@@ -173,9 +173,9 @@ void read_file(const char *filename, int is_main_process) {
 }
 
 int main(int argc, char *argv[]) {
-    struct timeval start, end;
+    struct timeval start, first_file_start, end;
     struct tm *local_time;
-    char time_str_start[100], time_str_end[100];
+    char time_str_start[100], time_str_first_file[100], time_str_end[100];
 
     char *directory = NULL;
     int single = 0;
@@ -227,6 +227,12 @@ int main(int argc, char *argv[]) {
     // Imprimir encabezados de la tabla
     printf("%-10s %-5s %-20s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
 
+    // Print the start time of the first file load
+    gettimeofday(&first_file_start, NULL);
+    local_time = localtime(&first_file_start.tv_sec);
+    strftime(time_str_first_file, sizeof(time_str_first_file), "%H:%M:%S", local_time);
+    
+
     if (single || multi) {
         if (single) {
             set_cpu_affinity(cpu);
@@ -250,6 +256,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    printf("Start time of the first file load: %s.%06ld\n", time_str_first_file, first_file_start.tv_usec);
     gettimeofday(&end, NULL);
     local_time = localtime(&end.tv_sec);
     strftime(time_str_end, sizeof(time_str_end), "%H:%M:%S", local_time);
