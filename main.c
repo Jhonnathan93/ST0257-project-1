@@ -222,7 +222,7 @@ int main(int argc, char *argv[]) {
     gettimeofday(&start, NULL);
     local_time = localtime(&start.tv_sec);
     strftime(time_str_start, sizeof(time_str_start), "%H:%M:%S", local_time);
-    printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);
+
 
     // Imprimir encabezados de la tabla
     printf("%-10s %-5s %-20s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
@@ -256,9 +256,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("Start time of the first file load: %s.%06ld\n", time_str_first_file, first_file_start.tv_usec);
     gettimeofday(&end, NULL);
     local_time = localtime(&end.tv_sec);
+    printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);
+    printf("Start time of the first file load: %s.%06ld\n", time_str_first_file, first_file_start.tv_usec);
     strftime(time_str_end, sizeof(time_str_end), "%H:%M:%S", local_time);
     printf("The program ended at %s.%06ld\n", time_str_end, end.tv_usec);
 
