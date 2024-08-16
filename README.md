@@ -53,7 +53,7 @@
 </ul>
 <pre><code class="has-line-data" data-line-start="56" data-line-end="58">python dataload.py -m -f &lt;directorio&gt;
 </code></pre>
-<p class="has-line-data" data-line-start="59" data-line-end="60"><em>En caso de estar ejecutando el archivo para windows cambiar <a href="http://dataloas.py">dataloas.py</a> por <a href="http://dataload-win.py">dataload-win.py</a></em></p>
+<p class="has-line-data" data-line-start="59" data-line-end="60"><em>En caso de estar ejecutando el archivo para windows cambiar <a href="http://dataload.py">dataloas.py</a> por <a href="http://dataload-win.py">dataload-win.py</a></em></p>
 <h2 class="code-line" data-line-start=61 data-line-end=62 ><a id="Parmetros_61"></a>Parámetros</h2>
 <ul>
 <li class="has-line-data" data-line-start="62" data-line-end="63">-f &lt;directorio&gt;: Especifica el directorio donde se encuentran los archivos CSV. Si no se especifica, se utilizará el directorio actual.</li>
