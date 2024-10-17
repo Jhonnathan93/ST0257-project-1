@@ -196,7 +196,10 @@ void *read_file_process(void *filename, int result_pipe) {
     // Obtener el uso de memoria final
     long mem_end = get_memory_usage(pid);
 
-    // Pasar el resultado al proceso principal a través de una tubería
+    // Pasar el resultado al proceso principal a través de una tubería (pipe)
+    // A pipe simply refers to a temporary software connection between two programs or commands.
+    // An area of the main memory is treated like a virtual file to temporarily hold data and pass it
+    // from one process to another in a single direction. In OSes like Unix, a pipe passes the output of one process to another process.
     Result result;
     result.pid = pid;
     result.cpu = cpu;
