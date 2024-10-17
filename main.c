@@ -13,6 +13,7 @@
 #include <pthread.h> // Biblioteca para hilos (threads)
 
 #define PAGE_SIZE 4096 // Tamaño de la página en bytes
+#define RECORDS_PER_THREAD 100 // Número de registros que cada hilo leerá
 
 // Estructura para representar una página de datos
 typedef struct Page {
@@ -23,7 +24,8 @@ typedef struct Page {
 // Estructura para pasar múltiples argumentos a la función de hilo
 typedef struct {
     const char *filename;
-    int is_main_process;
+    long start_offset;
+    long end_offset;
 } ThreadArgs;
 
 // Función para obtener la lista de archivos .csv en un directorio
@@ -97,21 +99,12 @@ long get_memory_usage(pid_t pid) {
     return size * sysconf(_SC_PAGESIZE) / 1024; // Convert to KB
 }
 
-// Función para leer un archivo en páginas
-void *read_file_thread(void *args) {
+// Función que será ejecutada por cada hilo, leyendo una porción del archivo
+void *read_file_chunk(void *args) {
     ThreadArgs *thread_args = (ThreadArgs *)args;
     const char *filename = thread_args->filename;
-
-    pid_t pid = getpid();
-    int cpu = sched_getcpu();  // Obtener el core donde se está ejecutando el proceso
-
-    long memory_usage_start = get_memory_usage(pid);
-    if (memory_usage_start == -1) {
-        fprintf(stderr, "Could not get memory usage for process %d\n", pid);
-    }
-
-    struct timeval file_start, file_end;
-    gettimeofday(&file_start, NULL);
+    long start_offset = thread_args->start_offset;
+    long end_offset = thread_args->end_offset;
 
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -119,63 +112,63 @@ void *read_file_thread(void *args) {
         return NULL;
     }
 
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
+    fseek(file, start_offset, SEEK_SET);
+    long bytes_to_read = end_offset - start_offset;
 
-    size_t num_pages = (file_size + PAGE_SIZE - 1) / PAGE_SIZE;
-
-    Page *pages = (Page *)malloc(num_pages * sizeof(Page));
-    if (!pages) {
-        fprintf(stderr, "Memory allocation failed for file %s\n", filename);
+    char *buffer = (char *)malloc(bytes_to_read);
+    if (!buffer) {
+        fprintf(stderr, "Memory allocation failed for reading file chunk\n");
         fclose(file);
         return NULL;
     }
 
-    for (size_t i = 0; i < num_pages; ++i) {
-        pages[i].data = (char *)malloc(PAGE_SIZE);
-        pages[i].size = 0;
-        if (!pages[i].data) {
-            fprintf(stderr, "Memory allocation failed for page %zu\n", i);
-            for (size_t j = 0; j < i; ++j) {
-                free(pages[j].data);
-            }
-            free(pages);
-            fclose(file);
-            return NULL;
-        }
-    }
+    fread(buffer, 1, bytes_to_read, file);
+    // Aquí puedes procesar los datos leídos en buffer (si fuera necesario)
 
-    size_t read_size;
-    for (size_t i = 0; i < num_pages; ++i) {
-        read_size = fread(pages[i].data, 1, PAGE_SIZE, file);
-        pages[i].size = read_size;
-        if (read_size < PAGE_SIZE && ferror(file)) {
-            fprintf(stderr, "File read failed for file %s: %s\n", filename, strerror(errno));
-            for (size_t j = 0; j < num_pages; ++j) {
-                free(pages[j].data);
-            }
-            free(pages);
-            fclose(file);
-            return NULL;
-        }
-    }
-
-    long memory_usage_end = get_memory_usage(pid);
-
-    gettimeofday(&file_end, NULL);
-    double elapsed_time = ((file_end.tv_sec - file_start.tv_sec) * 1000.0) + ((file_end.tv_usec - file_start.tv_usec) / 1000.0);
-
-    // Imprimir la información en una sola línea con formato de tabla, incluyendo el core
-    printf("%-10d %-5d %-20s %-10zu %-20.6f %-15ld %-15ld\n", pid, cpu, filename, num_pages, elapsed_time, memory_usage_start, memory_usage_end);
-
-    for (size_t i = 0; i < num_pages; ++i) {
-        free(pages[i].data);
-    }
-
-    free(pages);
+    free(buffer);
     fclose(file);
+    return NULL;
+}
 
+// Función para manejar el proceso de lectura de archivos por procesos e hilos (modo multi-core)
+void *read_file_process(void *filename) {
+    const char *file = (const char *)filename;
+
+    FILE *fp = fopen(file, "r");
+    if (!fp) {
+        fprintf(stderr, "Could not open file %s: %s\n", file, strerror(errno));
+        exit(1);
+    }
+
+    // Determinar el tamaño del archivo
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    // Determinar cuántos hilos necesitamos según el tamaño del archivo y la cantidad de registros
+    int num_threads = (file_size + (RECORDS_PER_THREAD * PAGE_SIZE) - 1) / (RECORDS_PER_THREAD * PAGE_SIZE);
+    pthread_t threads[num_threads];
+    ThreadArgs thread_args[num_threads];
+
+    long chunk_size = file_size / num_threads;
+
+    for (int i = 0; i < num_threads; i++) {
+        thread_args[i].filename = file;
+        thread_args[i].start_offset = i * chunk_size;
+        thread_args[i].end_offset = (i == num_threads - 1) ? file_size : (i + 1) * chunk_size;
+
+        if (pthread_create(&threads[i], NULL, read_file_chunk, &thread_args[i]) != 0) {
+            fprintf(stderr, "Error creating thread %d for file %s\n", i, file);
+            exit(1);
+        }
+    }
+
+    // Esperar a que todos los hilos terminen
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    fclose(fp);
     return NULL;
 }
 
@@ -243,12 +236,8 @@ int main(int argc, char *argv[]) {
 
         // Crea hilos para cada archivo CSV
         pthread_t threads[num_files];
-        ThreadArgs thread_args[num_files];
-
         for (int i = 0; i < num_files; i++) {
-            thread_args[i].filename = filenames[i];
-            thread_args[i].is_main_process = 1;
-            if (pthread_create(&threads[i], NULL, read_file_thread, &thread_args[i]) != 0) {
+            if (pthread_create(&threads[i], NULL, read_file_process, filenames[i]) != 0) {
                 fprintf(stderr, "Error creating thread for file %s\n", filenames[i]);
                 return 1;
             }
@@ -260,14 +249,15 @@ int main(int argc, char *argv[]) {
         }
 
     } else if (multi) {
-        // Implementación para multi-core mode (fork)
+        // Modo multi-core
         for (int i = 0; i < num_files; i++) {
             pid_t pid = fork();
             if (pid < 0) {
                 fprintf(stderr, "Fork failed for file %s: %s\n", filenames[i], strerror(errno));
                 return 1;
             } else if (pid == 0) {
-                read_file_thread(&(ThreadArgs){filenames[i], 0});
+                read_file_process(filenames[i]);
+                exit(0);
             }
         }
 
@@ -275,9 +265,9 @@ int main(int argc, char *argv[]) {
             wait(NULL);
         }
     } else {
-        // Default mode (single process)
+        // Modo secuencial
         for (int i = 0; i < num_files; i++) {
-            read_file_thread(&(ThreadArgs){filenames[i], 1});
+            read_file_process(filenames[i]);
         }
     }
 
