@@ -28,17 +28,6 @@ typedef struct {
     long end_offset;
 } ThreadArgs;
 
-// Estructura para pasar resultados al proceso principal
-typedef struct {
-    pid_t pid;
-    int cpu;
-    char filename[256];
-    size_t num_pages;
-    double time_ms;
-    long mem_start;
-    long mem_end;
-} Result;
-
 // Función para obtener la lista de archivos .csv en un directorio
 char **get_csv_file_list(const char *directory, int *num_files) {
     struct dirent *entry;
@@ -142,14 +131,8 @@ void *read_file_chunk(void *args) {
 }
 
 // Función para manejar el proceso de lectura de archivos por procesos e hilos (modo multi-core)
-void *read_file_process(void *filename, int result_pipe) {
+void *read_file_process(void *filename) {
     const char *file = (const char *)filename;
-
-    pid_t pid = getpid();
-    int cpu = sched_getcpu();
-
-    // Obtener el uso de memoria inicial
-    long mem_start = get_memory_usage(pid);
 
     FILE *fp = fopen(file, "r");
     if (!fp) {
@@ -157,20 +140,17 @@ void *read_file_process(void *filename, int result_pipe) {
         exit(1);
     }
 
-    // Obtener el tamaño del archivo
+    // Determinar el tamaño del archivo
     fseek(fp, 0, SEEK_END);
     long file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    // Dividir el archivo entre hilos
+    // Determinar cuántos hilos necesitamos según el tamaño del archivo y la cantidad de registros
     int num_threads = (file_size + (RECORDS_PER_THREAD * PAGE_SIZE) - 1) / (RECORDS_PER_THREAD * PAGE_SIZE);
     pthread_t threads[num_threads];
     ThreadArgs thread_args[num_threads];
-    long chunk_size = file_size / num_threads;
 
-    // Marcar el tiempo de inicio
-    struct timeval file_start, file_end;
-    gettimeofday(&file_start, NULL);
+    long chunk_size = file_size / num_threads;
 
     for (int i = 0; i < num_threads; i++) {
         thread_args[i].filename = file;
@@ -183,47 +163,13 @@ void *read_file_process(void *filename, int result_pipe) {
         }
     }
 
+    // Esperar a que todos los hilos terminen
     for (int i = 0; i < num_threads; i++) {
         pthread_join(threads[i], NULL);
     }
 
     fclose(fp);
-
-    // Marcar el tiempo de fin
-    gettimeofday(&file_end, NULL);
-    double time_ms = ((file_end.tv_sec - file_start.tv_sec) * 1000.0) + ((file_end.tv_usec - file_start.tv_usec) / 1000.0);
-
-    // Obtener el uso de memoria final
-    long mem_end = get_memory_usage(pid);
-
-    // Pasar el resultado al proceso principal a través de una tubería (pipe)
-    // A pipe simply refers to a temporary software connection between two programs or commands.
-    // An area of the main memory is treated like a virtual file to temporarily hold data and pass it
-    // from one process to another in a single direction. In OSes like Unix, a pipe passes the output of one process to another process.
-    Result result;
-    result.pid = pid;
-    result.cpu = cpu;
-    strncpy(result.filename, file, sizeof(result.filename));
-    result.num_pages = num_threads;
-    result.time_ms = time_ms;
-    result.mem_start = mem_start;
-    result.mem_end = mem_end;
-
-    write(result_pipe, &result, sizeof(Result));
-
     return NULL;
-}
-
-// Función que recopila los resultados y los imprime en la tabla
-void collect_results(int result_pipe, int num_files) {
-    printf("%-10s %-5s %-20s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
-    
-    for (int i = 0; i < num_files; i++) {
-        Result result;
-        read(result_pipe, &result, sizeof(Result));
-
-        printf("%-10d %-5d %-20s %-10zu %-20.6f %-15ld %-15ld\n", result.pid, result.cpu, result.filename, result.num_pages, result.time_ms, result.mem_start, result.mem_end);
-    }
 }
 
 int main(int argc, char *argv[]) {
@@ -277,39 +223,68 @@ int main(int argc, char *argv[]) {
     local_time = localtime(&start.tv_sec);
     strftime(time_str_start, sizeof(time_str_start), "%H:%M:%S", local_time);
 
-    // Crear una tubería para enviar los resultados desde los procesos hijos
-    int result_pipe[2];
-    if (pipe(result_pipe) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
+    // Imprimir encabezados de la tabla
+    printf("%-10s %-5s %-20s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
 
-    if (multi) {
+    // Print the start time of the first file load
+    gettimeofday(&first_file_start, NULL);
+    local_time = localtime(&first_file_start.tv_sec);
+    strftime(time_str_first_file, sizeof(time_str_first_file), "%H:%M:%S", local_time);
+
+    if (single) {
+        set_cpu_affinity(cpu); // Establece afinidad de CPU para el proceso principal
+
+        // Crea hilos para cada archivo CSV
+        pthread_t threads[num_files];
+        for (int i = 0; i < num_files; i++) {
+            if (pthread_create(&threads[i], NULL, read_file_process, filenames[i]) != 0) {
+                fprintf(stderr, "Error creating thread for file %s\n", filenames[i]);
+                return 1;
+            }
+        }
+
+        // Espera a que todos los hilos terminen
+        for (int i = 0; i < num_files; i++) {
+            pthread_join(threads[i], NULL);
+        }
+
+    } else if (multi) {
+        // Modo multi-core
         for (int i = 0; i < num_files; i++) {
             pid_t pid = fork();
             if (pid < 0) {
                 fprintf(stderr, "Fork failed for file %s: %s\n", filenames[i], strerror(errno));
                 return 1;
             } else if (pid == 0) {
-                // Procesos hijos (modo multi-core)
-                close(result_pipe[0]);  // Cerramos el lado de lectura de la tubería en los procesos hijos
-                read_file_process(filenames[i], result_pipe[1]);
+                read_file_process(filenames[i]);
                 exit(0);
             }
         }
 
-        close(result_pipe[1]);  // Cerramos el lado de escritura en el proceso padre
-        collect_results(result_pipe[0], num_files);  // Recopilar los resultados en el proceso padre
-        close(result_pipe[0]);  // Cerrar la tubería de lectura al finalizar
-
-    } else if (single) {
-        // Implementar el modo single-core con hilos
+        for (int i = 0; i < num_files; i++) {
+            wait(NULL);
+        }
+    } else {
+        // Modo secuencial
+        for (int i = 0; i < num_files; i++) {
+            read_file_process(filenames[i]);
+        }
     }
 
     gettimeofday(&end, NULL);
-    printf("The program started at %s\n", time_str_start);
+    local_time = localtime(&end.tv_sec);
+    printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);
+    printf("Start time of the first file load: %s.%06ld\n", time_str_first_file, first_file_start.tv_usec);
     strftime(time_str_end, sizeof(time_str_end), "%H:%M:%S", local_time);
-    printf("The program ended at %s\n", time_str_end);
+    printf("The program ended at %s.%06ld\n", time_str_end, end.tv_usec);
+
+    double elapsed_time = ((end.tv_sec - start.tv_sec) * 1000.0) + ((end.tv_usec - start.tv_usec) / 1000.0);
+    printf("The time used to read %d files is: %f milliseconds.\n", num_files, elapsed_time);
+
+    for (int i = 0; i < num_files; i++) {
+        free(filenames[i]);
+    }
+    free(filenames);
 
     return 0;
 }
