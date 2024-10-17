@@ -9,8 +9,8 @@
 <h2 class="code-line" data-line-start=8 data-line-end=9 ><a id="Estructura_del_proyecto_8"></a>Estructura del proyecto</h2>
 <ul>
 <li class="has-line-data" data-line-start="9" data-line-end="10">main.c: Código fuente principal para la versión en C.</li>
-<li class="has-line-data" data-line-start="10" data-line-end="11"><a href="http://dataload.py">dataload.py</a>: Código fuente principal para la versión en Python (Para sistemas operativos basados en unix).</li>
-<li class="has-line-data" data-line-start="11" data-line-end="12"><a href="http://dataload-win.py">dataload-win.py</a>: Código fuente principal para la versión en Python (Para el sistema operativo windows).</li>
+<li class="has-line-data" data-line-start="10" data-line-end="11"><a href="#">dataload.py</a>: Código fuente principal para la versión en Python (Para sistemas operativos basados en unix).</li>
+<li class="has-line-data" data-line-start="11" data-line-end="12"><a href="#">dataload-win.py</a>: Código fuente principal para la versión en Python (Para el sistema operativo windows).</li>
 <li class="has-line-data" data-line-start="12" data-line-end="14">Files: Carpeta con todos los archivos propuestos a leer en el proyecto</li>
 </ul>
 <h1 class="code-line" data-line-start=14 data-line-end=15 ><a id="Compilacin__C__14"></a>Compilación ( C )</h1>
@@ -53,7 +53,7 @@
 </ul>
 <pre><code class="has-line-data" data-line-start="56" data-line-end="58">python dataload.py -m -f &lt;directorio&gt;
 </code></pre>
-<p class="has-line-data" data-line-start="59" data-line-end="60"><em>En caso de estar ejecutando el archivo para windows cambiar <a href="http://dataload.py">dataloas.py</a> por <a href="http://dataload-win.py">dataload-win.py</a></em></p>
+<p class="has-line-data" data-line-start="59" data-line-end="60"><em>En caso de estar ejecutando el archivo para windows cambiar <a href="#">dataload.py</a> por <a href="#">dataload-win.py</a></em></p>
 <h2 class="code-line" data-line-start=61 data-line-end=62 ><a id="Parmetros_61"></a>Parámetros</h2>
 <ul>
 <li class="has-line-data" data-line-start="62" data-line-end="63">-f &lt;directorio&gt;: Especifica el directorio donde se encuentran los archivos CSV. Si no se especifica, se utilizará el directorio actual.</li>
