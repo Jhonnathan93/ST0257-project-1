@@ -10,7 +10,7 @@
 #include <string.h>
 #include <sched.h>
 #include <errno.h>
-#include <getopt.h>
+#include <pthread.h> // Biblioteca para hilos (threads)
 
 #define PAGE_SIZE 4096 // Tamaño de la página en bytes
 
@@ -19,6 +19,12 @@ typedef struct Page {
     char *data;
     size_t size;
 } Page;
+
+// Estructura para pasar múltiples argumentos a la función de hilo
+typedef struct {
+    const char *filename;
+    int is_main_process;
+} ThreadArgs;
 
 // Función para obtener la lista de archivos .csv en un directorio
 char **get_csv_file_list(const char *directory, int *num_files) {
@@ -92,7 +98,10 @@ long get_memory_usage(pid_t pid) {
 }
 
 // Función para leer un archivo en páginas
-void read_file(const char *filename, int is_main_process) {
+void *read_file_thread(void *args) {
+    ThreadArgs *thread_args = (ThreadArgs *)args;
+    const char *filename = thread_args->filename;
+
     pid_t pid = getpid();
     int cpu = sched_getcpu();  // Obtener el core donde se está ejecutando el proceso
 
@@ -107,7 +116,7 @@ void read_file(const char *filename, int is_main_process) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         fprintf(stderr, "Could not open file %s: %s\n", filename, strerror(errno));
-        exit(1);
+        return NULL;
     }
 
     fseek(file, 0, SEEK_END);
@@ -120,7 +129,7 @@ void read_file(const char *filename, int is_main_process) {
     if (!pages) {
         fprintf(stderr, "Memory allocation failed for file %s\n", filename);
         fclose(file);
-        exit(1);
+        return NULL;
     }
 
     for (size_t i = 0; i < num_pages; ++i) {
@@ -133,7 +142,7 @@ void read_file(const char *filename, int is_main_process) {
             }
             free(pages);
             fclose(file);
-            exit(1);
+            return NULL;
         }
     }
 
@@ -148,7 +157,7 @@ void read_file(const char *filename, int is_main_process) {
             }
             free(pages);
             fclose(file);
-            exit(1);
+            return NULL;
         }
     }
 
@@ -167,9 +176,7 @@ void read_file(const char *filename, int is_main_process) {
     free(pages);
     fclose(file);
 
-    if (!is_main_process) {
-        exit(0);
-    }
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -223,7 +230,6 @@ int main(int argc, char *argv[]) {
     local_time = localtime(&start.tv_sec);
     strftime(time_str_start, sizeof(time_str_start), "%H:%M:%S", local_time);
 
-
     // Imprimir encabezados de la tabla
     printf("%-10s %-5s %-20s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
 
@@ -231,19 +237,37 @@ int main(int argc, char *argv[]) {
     gettimeofday(&first_file_start, NULL);
     local_time = localtime(&first_file_start.tv_sec);
     strftime(time_str_first_file, sizeof(time_str_first_file), "%H:%M:%S", local_time);
-    
 
-    if (single || multi) {
-        if (single) {
-            set_cpu_affinity(cpu);
+    if (single) {
+        set_cpu_affinity(cpu); // Establece afinidad de CPU para el proceso principal
+
+        // Crea hilos para cada archivo CSV
+        pthread_t threads[num_files];
+        ThreadArgs thread_args[num_files];
+
+        for (int i = 0; i < num_files; i++) {
+            thread_args[i].filename = filenames[i];
+            thread_args[i].is_main_process = 1;
+            if (pthread_create(&threads[i], NULL, read_file_thread, &thread_args[i]) != 0) {
+                fprintf(stderr, "Error creating thread for file %s\n", filenames[i]);
+                return 1;
+            }
         }
+
+        // Espera a que todos los hilos terminen
+        for (int i = 0; i < num_files; i++) {
+            pthread_join(threads[i], NULL);
+        }
+
+    } else if (multi) {
+        // Implementación para multi-core mode (fork)
         for (int i = 0; i < num_files; i++) {
             pid_t pid = fork();
             if (pid < 0) {
                 fprintf(stderr, "Fork failed for file %s: %s\n", filenames[i], strerror(errno));
                 return 1;
             } else if (pid == 0) {
-                read_file(filenames[i], 0);
+                read_file_thread(&(ThreadArgs){filenames[i], 0});
             }
         }
 
@@ -251,8 +275,9 @@ int main(int argc, char *argv[]) {
             wait(NULL);
         }
     } else {
+        // Default mode (single process)
         for (int i = 0; i < num_files; i++) {
-            read_file(filenames[i], 1);
+            read_file_thread(&(ThreadArgs){filenames[i], 1});
         }
     }
 
