@@ -20,6 +20,11 @@ typedef struct Page {
     size_t size;
 } Page;
 
+typedef struct {
+    char title[128];
+    long views;
+} VideoInfo;
+
 // Función para obtener la lista de archivos .csv en un directorio
 char **get_csv_file_list(const char *directory, int *num_files) {
     struct dirent *entry;
@@ -91,36 +96,6 @@ long get_memory_usage(pid_t pid) {
     return size * sysconf(_SC_PAGESIZE) / 1024; // Convert to KB
 }
 
-// Función para leer un archivo en páginas
-void get_line_position_count(Page* pages, size_t num_pages, long** lines_positions, size_t* num_lines) {
-    size_t max_lines = 1000;  // Initial capacity for line positions array
-    
-    long *line_positions = (long *)malloc(max_lines * sizeof(long));
-    *num_lines = 0;
-
-    if (!line_positions) {
-        fprintf(stderr, "Memory allocation failed for line positions\n");
-        exit(1);
-    }
-
-    (*lines_positions)[(*num_lines)++] = 0;  // First line starts at the beginning of the file
-
-    for (size_t i = 0; i < num_pages; ++i) {
-        for (size_t j = 0; j < pages[i].size; ++j) {
-            if (pages[i].data[j] == '\n') {
-                if (*num_lines >= max_lines) {
-                    max_lines *= 2;
-                    line_positions = (long *)realloc(*lines_positions, max_lines * sizeof(long));
-                    if (!line_positions) {
-                        fprintf(stderr, "Reallocation failed for line positions\n");
-                        exit(1);
-                    }
-                }
-                (*lines_positions)[(*num_lines)++] = (i * PAGE_SIZE) + j + 1; // Next line starts after '\n'
-            }
-        }
-    }
-}
 
 void print_first_line(Page* pages, long* lines_positions, size_t num_lines){
     for (size_t i = 0; i < 1; ++i) {
@@ -192,80 +167,162 @@ void print_lines(Page* pages, long* lines_positions, size_t num_lines) {
     }
 }
 
+VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* num_lines,size_t max_lines) {
+    *num_lines = 0;
+    long* line_positions = (long*)malloc(max_lines * sizeof(long));
+    VideoInfo* video_info_array = (VideoInfo*)malloc(max_lines * sizeof(VideoInfo));
+    
+    if (!line_positions || !video_info_array) {
+        fprintf(stderr, "Memory allocation failed\n");
+        free(line_positions);
+        free(video_info_array);
+        return NULL;
+    }
+
+    line_positions[*num_lines] = 0;
+    (*num_lines)++;
+    // Process each page
+    for (size_t i = 0; i < num_pages; ++i) {
+        for (size_t j = 0; j < pages[i].size; ++j) {
+            if (pages[i].data[j] == '\n') {
+                if (*num_lines >= max_lines) {
+                    max_lines *= 2;
+                    long* new_positions = (long*)realloc(line_positions, max_lines * sizeof(long));
+                    VideoInfo* new_info = (VideoInfo*)realloc(video_info_array, max_lines * sizeof(VideoInfo));
+                    
+                    if (!new_positions || !new_info) {
+                        fprintf(stderr, "Reallocation failed\n");
+                        free(line_positions);
+                        free(video_info_array);
+                        return NULL;
+                    }
+                    
+                    line_positions = new_positions;
+                    video_info_array = new_info;
+                }
+
+                line_positions[*num_lines] = (i * PAGE_SIZE) + j + 1;
+                
+                // Extract line safely
+                long start_pos = line_positions[*num_lines - 1];
+                long end_pos = line_positions[*num_lines] - 1;
+                size_t line_length = end_pos - start_pos + 1;
+                
+                /*
+                if (line_length >= 14000) {  // Skip excessively long lines
+                    continue;
+                }
+                */
+
+                char* line = (char*)malloc(line_length + 1);
+                if (!line) {
+                    fprintf(stderr, "Memory allocation failed for line buffer\n");
+                    continue;
+                }
+
+                // Copy line data safely
+                size_t copied = 0;
+                size_t start_page = start_pos / PAGE_SIZE;
+                size_t start_offset = start_pos % PAGE_SIZE;
+                size_t end_page = end_pos / PAGE_SIZE;
+                
+                // Copy from first page
+                size_t first_page_bytes = (start_page == end_page) ? 
+                    line_length : PAGE_SIZE - start_offset;
+                memcpy(line, &pages[start_page].data[start_offset], first_page_bytes);
+                copied += first_page_bytes;
+
+                // Copy from subsequent pages if line spans multiple pages
+                for (size_t p = start_page + 1; p <= end_page && copied < line_length; ++p) {
+                    size_t bytes_to_copy = (p == end_page) ? 
+                        (end_pos % PAGE_SIZE) + 1 : PAGE_SIZE;
+                    if (copied + bytes_to_copy > line_length) {
+                        bytes_to_copy = line_length - copied;
+                    }
+                    memcpy(line + copied, pages[p].data, bytes_to_copy);
+                    copied += bytes_to_copy;
+                }
+                
+                line[line_length] = '\0';
+
+                // Parse CSV fields safely
+                char* token = strtok(line, ",");
+                char* title = NULL;
+                long views = 0;
+                int field = 0;
+                
+                while (token && field < 8) {
+                    if (field == 2) {  // Title field
+                        title = token;
+                    } else if (field == 7) {  // Views field
+                        views = atol(token);
+                    }
+                    token = strtok(NULL, ",");
+                    field++;
+                }
+
+                // Store the information safely
+                if (title) {
+                    strncpy(video_info_array[*num_lines - 1].title, title, 
+                        sizeof(video_info_array[*num_lines - 1].title) - 1);
+                    video_info_array[*num_lines - 1].title[sizeof(video_info_array[*num_lines - 1].title) - 1] = '\0';
+                } else {
+                    video_info_array[*num_lines - 1].title[0] = '\0';
+                }
+                video_info_array[*num_lines - 1].views = views;
+
+                free(line);
+                (*num_lines)++;
+            }
+        }
+    }
+
+    // printf("Extracted information for %zu pages.\n", num_pages);
+    ////  printf("Extracted information for %zu lines.\n", *num_lines - 1);  // -1 to exclude header
+
+    // Print only valid entries
+    /*
+    for (size_t i = 1; i < num_lines - 1; ++i) {  // Start from 1 to skip header
+        if (video_info_array[i].title[0] != '\0') {
+            printf("Line %zu: Title: %s, Views: %ld\n", 
+                i, video_info_array[i].title, video_info_array[i].views);
+        }
+    }
+    */
+    
+    return video_info_array; 
+}
+
 // Function to extract the title of the most viewed video
-void extract_most_viewed_video(const char* filename, Page* pages, long* lines_positions, size_t num_lines) {
+
+
+char* extract_most_viewed_video_info(VideoInfo* videos_info, size_t num_lines) {
     long max_views = 0;
     long line_most_viewed = 0;
-    char most_viewed_title[256] = {0}; // Array to store the title of the most viewed video
-    
-    for (size_t i = 1; i < num_lines - 1; ++i) { // Start from 1 to skip header, end before num_lines to avoid out of bounds
-        long start_pos = lines_positions[i];
-        long end_pos = lines_positions[i + 1] - 1;  // Exclude the newline character
 
-        // Create a buffer to hold the line
-        char line[14000] = {0}; // Assuming a max line length of 14000
-        size_t line_length = end_pos - start_pos + 1;
+    char* most_viewed_title = (char*)malloc(256 * sizeof(char)); // Array to store the title of the most viewed video
+    if (!most_viewed_title) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return NULL;
+    }
 
-        size_t start_page = start_pos / PAGE_SIZE;
-        size_t start_offset = start_pos % PAGE_SIZE;
-
-        // Read the line from the pages
-        if (start_page == (end_pos / PAGE_SIZE)) {
-            // The line is contained within the same page
-            memcpy(line, &pages[start_page].data[start_offset], line_length);
-            line[line_length] = '\0'; // Null-terminate the string
-        } else {
-            // The line spans across multiple pages
-            memcpy(line, &pages[start_page].data[start_offset], PAGE_SIZE - start_offset);
-            size_t current_length = PAGE_SIZE - start_offset;
-
-            for (size_t p = start_page + 1; p <= end_pos / PAGE_SIZE; ++p) {
-                size_t remaining_length = (p == end_pos / PAGE_SIZE) ? end_pos % PAGE_SIZE + 1 : PAGE_SIZE;
-                memcpy(line + current_length, pages[p].data, remaining_length);
-                current_length += remaining_length;
-            }
-            line[current_length] = '\0'; // Null-terminate the string
-        }
-
-        // Parse the line to extract the views and title
-        char* token = strtok(line, ",");
-        for (int i = 0; i < 2; ++i) { // Skip the first 2 tokens to get to title
-            token = strtok(NULL, ",");
-            if (!token) {
-               break; // Prevent null pointer dereference
-            }
-        }// Skip the second token 
-        char* title = token;
-        for (int j = 0; j < 5; ++j) { // Skip the first 7 tokens to get to views
-            token = strtok(NULL, ",");
-            if (!token) {
-                break; // Prevent null pointer dereference
-            }
-        }
-
-        long views = (token) ? atol(token) : 0; // Convert views to long, or 0 if token is NULL
-
-        // Update max views and title if current views are greater
-        if (views > max_views) {
-            max_views = views;
-            if (title) {
-                // Use strncpy safely to avoid overflow
-                strncpy(most_viewed_title, title, sizeof(most_viewed_title) - 1);
-                most_viewed_title[sizeof(most_viewed_title) - 1] = '\0'; // Ensure null termination
-            }
+    for (size_t i = 1; i < num_lines - 1; ++i) {  // Start from 1 to skip header
+        if (videos_info[i].views > max_views) {
+            max_views = videos_info[i].views;
+            strncpy(most_viewed_title, videos_info[i].title, 255);
+            most_viewed_title[255] = '\0';  // Ensure null termination
             line_most_viewed = i;
         }
     }
 
-    // Print the most viewed video title
     if (max_views > 0) {
-        printf("In the %s file the most viewed video is: \"%s\" with %ld views.\n", filename, most_viewed_title, max_views);
-
+        return most_viewed_title;
     } else {
         printf("No videos found.\n");
+        free(most_viewed_title);  // Free the memory if no valid result
+        return NULL;
     }
 }
-
 
 void read_file(const char *filename, int is_main_process, int write_fd) {
     pid_t pid = getpid();
@@ -341,25 +398,29 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
         }
 
         // Count the number of newlines in the page
-        for (size_t j = 0; j < pages[i].size; ++j) {
-            if (pages[i].data[j] == '\n') {
-                if (num_lines >= max_lines) {
-                    // Increase max_lines and reallocate
-                    max_lines *= 2;
-                    line_positions = (long *)realloc(line_positions, max_lines * sizeof(long));
-                    if (!line_positions) {
-                        fprintf(stderr, "Reallocation failed for line positions\n");
-                        exit(1);
-                    }
-                }
-                line_positions[num_lines++] = (i * PAGE_SIZE) + j + 1;  // Next line starts after '\n'
-            }
-        }
-    
+        // for (size_t j = 0; j < pages[i].size; ++j) {
+        //    if (pages[i].data[j] == '\n') {
+        //        if (num_lines >= max_lines) {
+        //            // Increase max_lines and reallocate
+        //            max_lines *= 2;
+        //            line_positions = (long *)realloc(line_positions, max_lines * sizeof(long));
+        //            if (!line_positions) {
+        //                fprintf(stderr, "Reallocation failed for line positions\n");
+        //                exit(1);
+        //            }
+        //        }
+        //        line_positions[num_lines++] = (i * PAGE_SIZE) + j + 1;  // Next line starts after '\n'
+        //    }
+        // }
     }
+    VideoInfo* videos_info;
+    char* most_viewed_title;
+    videos_info = process_pages_and_extract_data(pages, num_pages, &num_lines, max_lines);
+    most_viewed_title = extract_most_viewed_video_info(videos_info, num_lines);
     // print_lines(pages, line_positions, num_lines);
     // print_first_line(pages, line_positions, num_lines);
-    extract_most_viewed_video(filename, pages, line_positions, num_lines);
+    // extract_most_viewed_video(filename, pages, line_positions, num_lines);
+    // sleep(10);  // Simulate processing time
     long memory_usage_end = get_memory_usage(pid);
 
     gettimeofday(&file_end, NULL);
@@ -367,7 +428,7 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
 
     // print_array(line_positions, num_lines);
     // Imprimir la información en una sola línea con formato de tabla, incluyendo el core y número de líneas
-    printf("%-10d %-5d %-20s %-10zu %-10zu %-20.6f %-15ld %-15ld\n", pid, cpu, filename, num_pages, num_lines, elapsed_time, memory_usage_start, memory_usage_end);
+    printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %.30s\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title);
 
     if (!is_main_process) {
         write(write_fd, &memory_usage_end, sizeof(long));
@@ -381,7 +442,8 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
 
     free(pages);
     fclose(file);
-
+    free(line_positions);
+    free(videos_info);
     if (!is_main_process) {
         exit(0);
     }
@@ -441,7 +503,7 @@ int main(int argc, char *argv[]) {
 
 
     // Imprimir encabezados de la tabla
-    printf("%-10s %-5s %-20s %-10s %-10s %-20s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Line count", "Time (ms)", "Mem Start (KB)", "Mem End (KB)");
+    printf("%-10s %-5s %-20s %-10s %-10s %-15s %-15s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Lines", "Time (ms)", "Mem Start (KB)", "Mem End (KB)", "Most viewed");
 
     // Print the start time of the first file load
     gettimeofday(&first_file_start, NULL);
