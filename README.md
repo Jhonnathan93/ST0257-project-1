@@ -15,7 +15,7 @@
 </ul>
 <h1 class="code-line" data-line-start=14 data-line-end=15 ><a id="Compilacin__C__14"></a>Compilación ( C )</h1>
 <p class="has-line-data" data-line-start="16" data-line-end="17">Para compilar el programa en C, usa el siguiente comando:</p>
-<pre><code class="has-line-data" data-line-start="19" data-line-end="21">gcc -o dataload main.c
+<pre><code class="has-line-data" data-line-start="19" data-line-end="21">gcc -o dataload main.c utils/utils.c utils/reader.c processing/metrics.c
 </code></pre>
 <p class="has-line-data" data-line-start="22" data-line-end="23">Esto generará un ejecutable llamado dataload.</p>
 <h2 class="code-line" data-line-start=24 data-line-end=25 ><a id="Ejecucin_24"></a>Ejecución</h2>
