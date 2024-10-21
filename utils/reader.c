@@ -33,8 +33,6 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
         exit(1);
     }
 
-    // Initialize the line count
-    
     size_t num_lines = 0;
     size_t max_lines = 1000;  // Initial capacity for line positions array
     long *line_positions = (long *)malloc(max_lines * sizeof(long));
@@ -74,22 +72,6 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
             fclose(file);
             exit(1);
         }
-
-        // Count the number of newlines in the page
-        // for (size_t j = 0; j < pages[i].size; ++j) {
-        //    if (pages[i].data[j] == '\n') {
-        //        if (num_lines >= max_lines) {
-        //            // Increase max_lines and reallocate
-        //            max_lines *= 2;
-        //            line_positions = (long *)realloc(line_positions, max_lines * sizeof(long));
-        //            if (!line_positions) {
-        //                fprintf(stderr, "Reallocation failed for line positions\n");
-        //                exit(1);
-        //            }
-        //        }
-        //        line_positions[num_lines++] = (i * PAGE_SIZE) + j + 1;  // Next line starts after '\n'
-        //    }
-        // }
     }
 
     VideoInfo* videos_info;
@@ -98,23 +80,16 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
     videos_info = process_pages_and_extract_data(pages, num_pages, &num_lines, max_lines);
      
     divide_and_process_chunks(videos_info, &most_viewed_title, &max_views, num_lines);
-    // most_viewed_title = extract_most_viewed_video_info(videos_info, num_lines);
-    // print_lines(pages, line_positions, num_lines);
-    // print_first_line(pages, line_positions, num_lines);
-    // extract_most_viewed_video(filename, pages, line_positions, num_lines);
-    // sleep(10);  // Simulate processing time
 
     gettimeofday(&file_end, NULL);
     double elapsed_time = ((file_end.tv_sec - file_start.tv_sec) * 1000.0) + ((file_end.tv_usec - file_start.tv_usec) / 1000.0);
     
     long memory_usage_end = get_memory_usage(pid);
-    printf("Memory usage for process %d: %ld KB\n", pid, memory_usage_end);
-    // print_array(line_positions, num_lines);
-    // Imprimir la información en una sola línea con formato de tabla, incluyendo el core y número de líneas
+
     printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %.15s\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title);
 
     if (!is_main_process) {
-        // write(write_fd, &memory_usage_end, sizeof(long));
+        write(write_fd, &memory_usage_end, sizeof(long));
         // printf("Reading file %s in process %d on CPU %d\n", filename);
     }
     

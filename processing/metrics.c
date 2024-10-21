@@ -43,12 +43,6 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
                 long end_pos = line_positions[*num_lines] - 1;
                 size_t line_length = end_pos - start_pos + 1;
                 
-                /*
-                if (line_length >= 14000) {  // Skip excessively long lines
-                    continue;
-                }
-                */
-
                 char* line = (char*)malloc(line_length + 1);
                 if (!line) {
                     fprintf(stderr, "Memory allocation failed for line buffer\n");
