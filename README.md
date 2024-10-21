@@ -12,10 +12,12 @@
 <li class="has-line-data" data-line-start="10" data-line-end="11"><a href="#">dataload.py</a>: Código fuente principal para la versión en Python (Para sistemas operativos basados en unix).</li>
 <li class="has-line-data" data-line-start="11" data-line-end="12"><a href="#">dataload-win.py</a>: Código fuente principal para la versión en Python (Para el sistema operativo windows).</li>
 <li class="has-line-data" data-line-start="12" data-line-end="14">Files: Carpeta con todos los archivos propuestos a leer en el proyecto</li>
+<li class="has-line-data" data-line-start="12" data-line-end="14">Utils: Carpeta con funciones auxiliares e información (constantes) en las que se apoyan algunas funciones</li>
+<li class="has-line-data" data-line-start="12" data-line-end="14">Processing: Carpeta con funciones centrados en el procesamiento de datos</li>
 </ul>
 <h1 class="code-line" data-line-start=14 data-line-end=15 ><a id="Compilacin__C__14"></a>Compilación ( C )</h1>
 <p class="has-line-data" data-line-start="16" data-line-end="17">Para compilar el programa en C, usa el siguiente comando:</p>
-<pre><code class="has-line-data" data-line-start="19" data-line-end="21">gcc -o dataload main.c
+<pre><code class="has-line-data" data-line-start="19" data-line-end="21">gcc -o dataload main.c utils/utils.c utils/reader.c processing/metrics.c
 </code></pre>
 <p class="has-line-data" data-line-start="22" data-line-end="23">Esto generará un ejecutable llamado dataload.</p>
 <h2 class="code-line" data-line-start=24 data-line-end=25 ><a id="Ejecucin_24"></a>Ejecución</h2>
