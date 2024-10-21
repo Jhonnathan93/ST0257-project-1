@@ -16,7 +16,6 @@ def most_viewed_video(csv_file):
 # Example usage
 if __name__ == "__main__":
     # Specify the path to the CSV file
-    csv_file = 'files/USvideos.'
     
     files = ['files/USvideos.csv', 'files/CAvideos.csv', 'files/DEvideos.csv', 'files/FRvideos.csv', 'files/GBvideos.csv', 'files/MXvideos.csv', 'files/INvideos.csv', 'files/JPvideos.csv', 'files/KRvideos.csv', 'files/RUvideos.csv']
     # Get the most viewed video title
