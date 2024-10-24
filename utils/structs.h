@@ -23,4 +23,10 @@ typedef struct {
     pthread_mutex_t *mutex;
 } ThreadData;
 
+typedef struct {
+    char title[128];
+    size_t views;
+    long memory_usage;
+} MostViewedInfo;
+
 #endif // STRUCTS_H

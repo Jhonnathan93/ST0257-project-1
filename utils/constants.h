@@ -5,6 +5,4 @@
 
 #define LINES_PER_THREAD 4000
 
-#define MAX_NUM_THREADS 1000
-
 #endif

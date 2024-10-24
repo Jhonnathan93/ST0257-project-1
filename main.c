@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
 
     // Imprimir encabezados de la tabla
-    printf("%-10s %-5s %-20s %-10s %-10s %-15s %-15s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Lines", "Time (ms)", "Mem Start (KB)", "Mem End (KB)", "Most viewed");
+    printf("%-10s %-5s %-20s %-10s %-10s %-15s %-15s %-15s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Lines", "Time (ms)", "Mem Start (KB)", "Mem End (KB)", "Most viewed", "Max views");
 
     // Print the start time of the first file load
     gettimeofday(&first_file_start, NULL);
@@ -89,16 +89,30 @@ int main(int argc, char *argv[]) {
         
 
         long total_men_usage = 0;
+        MostViewedInfo overall_most_viewed;
+        overall_most_viewed.views = 0; // Initialize to zero
+        overall_most_viewed.memory_usage = 0;    
+
+
         for (int i = 0; i < num_files; i++) {
-            long mem_usage;
-            read(pipefd[0], &mem_usage, sizeof(mem_usage));
-            total_men_usage += mem_usage;
+            MostViewedInfo info;
+
+            read(pipefd[0], &info, sizeof(MostViewedInfo));
+            
+            total_men_usage += info.memory_usage;
+            if (info.views > overall_most_viewed.views) {
+                overall_most_viewed.views = info.views;
+                strncpy(overall_most_viewed.title, info.title, sizeof(overall_most_viewed.title));
+            }
         }
 
         for (int i = 0; i < num_files; i++) {
             wait(NULL);
         }
         
+        printf("Overall most viewed title is: %s with %zu views.\n",
+               overall_most_viewed.title, overall_most_viewed.views);
+
         total_men_usage += get_memory_usage(pid);
         long total_men_in_mb = total_men_usage / 1024;
         printf("The total memory usage is: %ld KB (%ld MB)\n", total_men_usage, total_men_in_mb);

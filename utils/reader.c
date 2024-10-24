@@ -106,12 +106,17 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
     // printf("num_lines = %d\n", num_lines);
     // printf("most_viewed_title = %s", most_viewed_title);
 
-    printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %.20s\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title);
+    printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %-15.10s %-15zu\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title, max_views);
 
     if (!is_main_process) {
-        write(write_fd, &memory_usage_end, sizeof(long));
-        // printf("Reading file %s in process %d on CPU %d\n", filename);
-        close(write_fd);
+        MostViewedInfo info;
+        strncpy(info.title, most_viewed_title, sizeof(info.title));
+        info.views = max_views;
+        info.memory_usage = memory_usage_end; // Set the memory usage
+
+        write(write_fd, &info, sizeof(MostViewedInfo)); // Write the structure to the pipe
+        
+        close(write_fd); // Close the write end
     }
     
     for (size_t i = 0; i < num_pages; ++i) {
