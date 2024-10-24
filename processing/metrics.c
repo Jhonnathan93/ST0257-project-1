@@ -140,7 +140,7 @@ char* extract_most_viewed_video_info(VideoInfo* videos_info, size_t num_lines) {
 void* find_most_viewed_video(void* arg) {
     ThreadData *data = (ThreadData *)arg;
     long local_max_views = 0;
-    char local_most_viewed_title[256] = {0};
+    char local_most_viewed_title[128] = {0};
 
     // Process the assigned chunk of videos
     for (size_t i = data->start; i < data->end; ++i) {
@@ -166,13 +166,17 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     size_t num_threads = num_lines / LINES_PER_THREAD;
     
     pthread_t threads[num_threads];
-    ThreadData thread_data[num_lines];
+    ThreadData thread_data[num_threads];
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     uint32_t max_views = 0;
-    char most_viewed_title[256] = {0};
+    char most_viewed_title[128] = {0};
 
     // size_t chunk_size = num_lines / num_threads;
-    
+    *most_viewed_str = malloc(128 * sizeof(char)); // Allocate space for 128 characters
+    if (*most_viewed_str == NULL) {
+        fprintf(stderr, "Memory allocation for most_viewed_str failed\n");
+        return; // Handle the error appropriately
+    } 
   
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -196,6 +200,6 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     pthread_attr_destroy(&attr);
     // Print the final result
     (*most_views) = max_views;
-    strncpy(*most_viewed_str, most_viewed_title, 255);
-    (*most_viewed_str)[255] = '\0';  // Ensure null termination
+    strncpy(*most_viewed_str, most_viewed_title, 128);
+    (*most_viewed_str)[128] = '\0';  // Ensure null termination
 }

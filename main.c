@@ -106,14 +106,15 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < num_files; i++) {
             read_file(filenames[i], 1, -1);
         }
-
-        printf("The total memory usage is: %ld KB\n", get_memory_usage(pid));
+        
+        long total_men_usage = get_memory_usage(pid);
+        long total_men_in_mb = total_men_usage / 1024;
+        printf("The total memory usage is: %ld KB (%ld MB) \n", total_men_usage, total_men_in_mb);
     }
 
     
     gettimeofday(&end, NULL);
     local_time = localtime(&end.tv_sec);
-
     printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);
     printf("Start time of the first file load: %s.%06ld\n", time_str_first_file, first_file_start.tv_usec);
     strftime(time_str_end, sizeof(time_str_end), "%H:%M:%S", local_time);

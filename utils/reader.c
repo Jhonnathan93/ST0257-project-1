@@ -42,7 +42,7 @@ void read_pages(const char* filename, Page** pages, size_t* num_pages) {
         (* pages)[i].data = (char *)malloc(PAGE_SIZE);
         (* pages)[i].size = 0;
     
-    if (!(* pages)[i].data) {
+        if (!(* pages)[i].data) {
             fprintf(stderr, "Memory allocation failed for page %zu\n", i);
             for (size_t j = 0; j < i; ++j) {
                 free((* pages)[j].data);
@@ -105,16 +105,7 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
     // printf("num_pages = %d\n", num_pages);
     // printf("num_lines = %d\n", num_lines);
     // printf("most_viewed_title = %s", most_viewed_title);
-    printf("%-10d", pid);
-    printf("%-5d", cpu);
-    printf("%-20s", filename);
-    printf("%-10zu", num_pages);
-    printf("%-10zu", num_lines - 1);
-    printf("%-15f", elapsed_time);
-    printf("%-15ld", memory_usage_start);
-    printf("%-15ld", memory_usage_end);
-    printf("%.20s\n", most_viewed_title);
-  
+
     printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %.20s\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title);
 
     if (!is_main_process) {
