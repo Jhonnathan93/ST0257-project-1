@@ -171,7 +171,7 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     uint32_t max_views = 0;
     char most_viewed_title[256] = {0};
 
-    size_t chunk_size = num_lines / num_threads;
+    // size_t chunk_size = num_lines / num_threads;
     
   
     pthread_attr_t attr;
@@ -181,8 +181,8 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     // Create threads and assign chunks
     for (int i = 0; i < num_threads; ++i) {
         thread_data[i].videos_info = video_info_array;
-        thread_data[i].start = i * chunk_size;
-        thread_data[i].end = (i == num_threads - 1) ? num_lines : (i + 1) * chunk_size;
+        thread_data[i].start = i * LINES_PER_THREAD;
+        thread_data[i].end = (i == num_threads - 1) ? num_lines : (i + 1) * LINES_PER_THREAD;
         thread_data[i].max_views = &max_views;
         thread_data[i].most_viewed_title = most_viewed_title;
         thread_data[i].mutex = &mutex;

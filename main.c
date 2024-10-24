@@ -40,6 +40,7 @@ int main(int argc, char *argv[]) {
 
     int num_files;
     char **filenames = get_csv_file_list(directory, &num_files);
+    
     if (filenames == NULL) {
         fprintf(stderr, "No .csv files found in directory %s\n", directory);
         return 1;
@@ -60,16 +61,16 @@ int main(int argc, char *argv[]) {
     // Print the start time of the first file load
     gettimeofday(&first_file_start, NULL);
     local_time = localtime(&first_file_start.tv_sec);
-    strftime(time_str_first_file, sizeof(time_str_first_file), "%H:%M:%S", local_time);
+    strftime(time_str_first_file, sizeof(time_str_first_file), "%H:%M:%S", local_time); 
 
-    int pipefd[2]; // Pipe file descriptors
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-    }
-
-    
     if (single || multi) {
+        
+        int pipefd[2]; // Pipe file descriptors
+        if (pipe(pipefd) == -1) {
+            perror("pipe");
+            exit(EXIT_FAILURE);
+        }
+
         if (single) {
             set_cpu_affinity(cpu);
         }
@@ -105,10 +106,14 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < num_files; i++) {
             read_file(filenames[i], 1, -1);
         }
+
+        printf("The total memory usage is: %ld KB\n", get_memory_usage(pid));
     }
 
+    
     gettimeofday(&end, NULL);
     local_time = localtime(&end.tv_sec);
+
     printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);
     printf("Start time of the first file load: %s.%06ld\n", time_str_first_file, first_file_start.tv_usec);
     strftime(time_str_end, sizeof(time_str_end), "%H:%M:%S", local_time);
@@ -120,6 +125,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < num_files; i++) {
         free(filenames[i]);
     }
+
     free(filenames);
 
     return 0;

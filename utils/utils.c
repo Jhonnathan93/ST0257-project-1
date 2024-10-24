@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 
-
 #include "utils.h"
 #include "constants.h"
 #include "structs.h"
@@ -32,17 +31,20 @@ char **get_csv_file_list(const char *directory, int *num_files) {
             const char *ext = strrchr(entry->d_name, '.');
             if (ext && strcmp(ext, ".csv") == 0) {
                 file_list = realloc(file_list, (*num_files + 1) * sizeof(char *));
+
                 if (file_list == NULL) {
                     perror("realloc");
                     closedir(dp);
                     return NULL;
                 }
+
                 file_list[*num_files] = malloc(strlen(directory) + strlen(entry->d_name) + 2);
                 if (file_list[*num_files] == NULL) {
                     perror("malloc");
                     closedir(dp);
                     return NULL;
                 }
+
                 sprintf(file_list[*num_files], "%s/%s", directory, entry->d_name);
                 (*num_files)++;
             }
@@ -51,7 +53,6 @@ char **get_csv_file_list(const char *directory, int *num_files) {
     closedir(dp);
     return file_list;
 }
-
 
 long get_memory_usage(pid_t pid) {
     char statm_path[128];
