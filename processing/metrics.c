@@ -6,7 +6,7 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
     *num_lines = 0;
     long* line_positions = (long*)malloc(max_lines * sizeof(long));
     VideoInfo* video_info_array = (VideoInfo*)malloc(max_lines * sizeof(VideoInfo));
-    
+     
     if (!line_positions || !video_info_array) {
         fprintf(stderr, "Memory allocation failed\n");
         free(line_positions);
@@ -17,6 +17,8 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
     line_positions[*num_lines] = 0;
     (*num_lines)++;
     // Process each page
+  //
+    char* line = (char* )malloc(256 * sizeof(char));
     for (size_t i = 0; i < num_pages; ++i) {
         for (size_t j = 0; j < pages[i].size; ++j) {
             if (pages[i].data[j] == '\n') {
@@ -43,7 +45,17 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
                 long end_pos = line_positions[*num_lines] - 1;
                 size_t line_length = end_pos - start_pos + 1;
                 
-                char* line = (char*)malloc(line_length + 1);
+                
+                char* temp_line = (char*)realloc(line, line_length + 1);
+                if (!temp_line) {
+                    fprintf(stderr, "Memory allocation failed for line buffer\n");
+                    free(line);  // Free previous allocation
+                    line = NULL; // Set to NULL for safety
+                    continue;
+                } else {
+                    line = temp_line; // Update line if realloc was successful
+                }
+
                 if (!line) {
                     fprintf(stderr, "Memory allocation failed for line buffer\n");
                     continue;
@@ -99,8 +111,10 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
                     video_info_array[*num_lines - 1].title[0] = '\0';
                 }
                 video_info_array[*num_lines - 1].views = views;
-
-                free(line);
+                if (line != NULL) {
+                    free(line);
+                    line = NULL;
+                }
                 (*num_lines)++;
             }
         }
@@ -197,9 +211,11 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     for (int i = 0; i < num_threads; ++i) {
         pthread_join(threads[i], NULL);
     }
+
     pthread_attr_destroy(&attr);
     // Print the final result
     (*most_views) = max_views;
     strncpy(*most_viewed_str, most_viewed_title, 128);
     (*most_viewed_str)[128] = '\0';  // Ensure null termination
 }
+

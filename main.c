@@ -54,7 +54,6 @@ int main(int argc, char *argv[]) {
     local_time = localtime(&start.tv_sec);
     strftime(time_str_start, sizeof(time_str_start), "%H:%M:%S", local_time);
 
-
     // Imprimir encabezados de la tabla
     printf("%-10s %-5s %-20s %-10s %-10s %-15s %-15s %-15s %-15s %-15s\n", "PID", "Core", "File", "Pages", "Lines", "Time (ms)", "Mem Start (KB)", "Mem End (KB)", "Most viewed", "Max views");
 
@@ -74,6 +73,8 @@ int main(int argc, char *argv[]) {
         if (single) {
             set_cpu_affinity(cpu);
         }
+        else {
+        }
         for (int i = 0; i < num_files; i++) {
             pid_t pid = fork();
             if (pid < 0) {
@@ -86,13 +87,11 @@ int main(int argc, char *argv[]) {
         }
         
         close(pipefd[1]);
-        
 
         long total_men_usage = 0;
         MostViewedInfo overall_most_viewed;
         overall_most_viewed.views = 0; // Initialize to zero
         overall_most_viewed.memory_usage = 0;    
-
 
         for (int i = 0; i < num_files; i++) {
             MostViewedInfo info;
@@ -125,7 +124,6 @@ int main(int argc, char *argv[]) {
         long total_men_in_mb = total_men_usage / 1024;
         printf("The total memory usage is: %ld KB (%ld MB) \n", total_men_usage, total_men_in_mb);
     }
-
     
     gettimeofday(&end, NULL);
     local_time = localtime(&end.tv_sec);

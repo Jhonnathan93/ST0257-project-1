@@ -72,27 +72,20 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
     pid_t pid = getpid();
     int cpu = sched_getcpu();  // Obtener el core donde se está ejecutando el proceso
     long memory_usage_start = get_memory_usage(pid);
-
+    Page* pages;
+    VideoInfo* videos_info;
+    char* most_viewed_title;
+    size_t max_views, num_pages, num_lines, max_lines = 1000;
+    
     if (memory_usage_start == -1) {
         fprintf(stderr, "Could not get memory usage for process %d\n", pid);
     }
     
-    
     struct timespec file_start, file_end;
     clock_gettime(CLOCK_MONOTONIC, &file_start);
 
-    Page* pages;
-    size_t num_pages;
-
     read_pages(filename, &pages, &num_pages);
 
-    VideoInfo* videos_info;
-    char* most_viewed_title;
-
-    size_t max_views;
-    size_t max_lines = 1000;
-    size_t num_lines;
-    
     videos_info = process_pages_and_extract_data(pages, num_pages, &num_lines, max_lines);
      
     divide_and_process_chunks(videos_info, &most_viewed_title, &max_views, num_lines);
@@ -102,10 +95,6 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
 
     long memory_usage_end = get_memory_usage(pid);
     
-    // printf("num_pages = %d\n", num_pages);
-    // printf("num_lines = %d\n", num_lines);
-    // printf("most_viewed_title = %s", most_viewed_title);
-
     printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %-15.10s %-15zu\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title, max_views);
 
     if (!is_main_process) {
@@ -124,7 +113,6 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
     }
 
     free(pages);
-
 
     free(videos_info);
 
