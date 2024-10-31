@@ -62,19 +62,14 @@ int main(int argc, char *argv[]) {
     local_time = localtime(&first_file_start.tv_sec);
     strftime(time_str_first_file, sizeof(time_str_first_file), "%H:%M:%S", local_time); 
 
-    if (single || multi) {
-        
+    if (multi) {
+
         int pipefd[2]; // Pipe file descriptors
         if (pipe(pipefd) == -1) {
             perror("pipe");
             exit(EXIT_FAILURE);
         }
 
-        if (single) {
-            set_cpu_affinity(cpu);
-        }
-        else {
-        }
         for (int i = 0; i < num_files; i++) {
             pid_t pid = fork();
             if (pid < 0) {
@@ -85,7 +80,7 @@ int main(int argc, char *argv[]) {
                 read_file(filenames[i], 0, pipefd[1]);
             }
         }
-        
+
         close(pipefd[1]);
 
         long total_men_usage = 0;
@@ -97,7 +92,7 @@ int main(int argc, char *argv[]) {
             MostViewedInfo info;
 
             read(pipefd[0], &info, sizeof(MostViewedInfo));
-            
+
             total_men_usage += info.memory_usage;
             if (info.views > overall_most_viewed.views) {
                 overall_most_viewed.views = info.views;
@@ -108,23 +103,60 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < num_files; i++) {
             wait(NULL);
         }
-        
+
         printf("Overall most viewed title is: %s with %zu views.\n",
                overall_most_viewed.title, overall_most_viewed.views);
 
         total_men_usage += get_memory_usage(pid);
         long total_men_in_mb = total_men_usage / 1024;
         printf("The total memory usage is: %ld KB (%ld MB)\n", total_men_usage, total_men_in_mb);
+    } else if (single) {
+        pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        char *most_viewed_title = (char *)malloc(128 * sizeof(char));
+        uint32_t most_views = 0;
+        pthread_t threads[num_files];
+        size_t total_memory_usage = 0;
+        MainThreadData threads_data[num_files];
+        
+        if (!most_viewed_title) {
+            fprintf(stderr, "Memory allocation for most_viewed_title failed.\n");
+            return EXIT_FAILURE;
+        }
+
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+
+        // Set the stack size attribute
+        if (pthread_attr_setstacksize(&attr, STACK_SIZE) != 0) {
+            perror("Failed to set stack size");
+            return EXIT_FAILURE;
+        }
+
+        for (int i = 0; i < num_files; i++) {
+            threads_data[i].filename = filenames[i];
+            threads_data[i].most_viewed_title = most_viewed_title;
+            threads_data[i].most_views = &most_views;
+            threads_data[i].total_memory_usage = &total_memory_usage;
+            threads_data[i].mutex = &mutex;
+            pthread_create(&threads[i], &attr, read_file_thread, &threads_data[i]);
+        }
+
+        for (int i = 0; i < num_files; i++) {
+            pthread_join(threads[i], NULL);
+        }
+ 
+        printf("Overall most viewed title is: %s with %zu views.\n", most_viewed_title, most_views);
+        printf("The total memory usage is: %ld KB (%ld MB)\n", total_memory_usage, total_memory_usage / 1024);
     } else {
         for (int i = 0; i < num_files; i++) {
             read_file(filenames[i], 1, -1);
         }
-        
+
         long total_men_usage = get_memory_usage(pid);
         long total_men_in_mb = total_men_usage / 1024;
         printf("The total memory usage is: %ld KB (%ld MB) \n", total_men_usage, total_men_in_mb);
     }
-    
+
     gettimeofday(&end, NULL);
     local_time = localtime(&end.tv_sec);
     printf("The program starts at %s.%06ld\n", time_str_start, start.tv_usec);

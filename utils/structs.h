@@ -29,4 +29,12 @@ typedef struct {
     long memory_usage;
 } MostViewedInfo;
 
+typedef struct {
+    char *filename;
+    char *most_viewed_title;
+    uint32_t *most_views;
+    size_t *total_memory_usage;
+    pthread_mutex_t *mutex;
+} MainThreadData;
+
 #endif // STRUCTS_H

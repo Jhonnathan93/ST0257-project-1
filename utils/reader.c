@@ -119,3 +119,50 @@ void read_file(const char *filename, int is_main_process, int write_fd) {
     if (!is_main_process)
         exit(0);
 }
+
+void* read_file_thread(void *args) {
+    pid_t pid = getpid();
+    int cpu = sched_getcpu();  // Obtener el core donde se está ejecutando el proceso
+    long memory_usage_start = get_memory_usage(pid);
+    Page* pages;
+    VideoInfo* videos_info;
+    char* most_viewed_title;
+    size_t max_views, num_pages, num_lines, max_lines = 1000;
+    MainThreadData *data = (MainThreadData *)args;
+
+    const char* filename = data->filename;
+    if (memory_usage_start == -1) {
+        fprintf(stderr, "Could not get memory usage for process %d\n", pid);
+    }
+ 
+    struct timespec file_start, file_end;
+    clock_gettime(CLOCK_MONOTONIC, &file_start);
+    read_pages(filename, &pages, &num_pages);
+    videos_info = process_pages_and_extract_data(pages, num_pages, &num_lines, max_lines);
+    divide_and_process_chunks(videos_info, &most_viewed_title, &max_views, num_lines);
+    clock_gettime(CLOCK_MONOTONIC, &file_end);
+
+    double elapsed_time = (file_end.tv_sec - file_start.tv_sec) * 1000.0 + (file_end.tv_nsec - file_start.tv_nsec) / 1e6;
+
+    long memory_usage_end = get_memory_usage(pid);
+    *data->total_memory_usage = memory_usage_end;
+    pthread_mutex_lock(data->mutex);
+    if (max_views > *data->most_views) {
+      *data->most_views = max_views;
+      strncpy(data->most_viewed_title, most_viewed_title, 127);
+      data->most_viewed_title[127] = '\0';
+    }
+    pthread_mutex_unlock(data->mutex);
+
+    printf("%-10d %-5d %-20s %-10zu %-10zu %-15.6f %-15ld %-15ld %-15.20s %-20zu\n", pid, cpu, filename, num_pages, num_lines - 1, elapsed_time, memory_usage_start, memory_usage_end, most_viewed_title, max_views);
+    
+    for (size_t i = 0; i < num_pages; ++i) {
+        free(pages[i].data);
+    }
+
+    free(pages);
+
+    free(videos_info);
+
+    return NULL;
+}

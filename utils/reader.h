@@ -13,5 +13,6 @@
 
 void read_file(const char* filename, int is_main_process, int write_fd);
 void read_pages(const char* filename, Page** pages, size_t* num_pages);
+void *read_file_thread(void *args);
 
 #endif // READER_H

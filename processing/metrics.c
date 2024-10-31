@@ -2,7 +2,7 @@
 
 #include "metrics.h"
 
-VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* num_lines,size_t max_lines) {
+VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t* num_lines, size_t max_lines) {
     *num_lines = 0;
     long* line_positions = (long*)malloc(max_lines * sizeof(long));
     VideoInfo* video_info_array = (VideoInfo*)malloc(max_lines * sizeof(VideoInfo));
@@ -16,9 +16,14 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
 
     line_positions[*num_lines] = 0;
     (*num_lines)++;
-    // Process each page
-  //
-    char* line = (char* )malloc(256 * sizeof(char));
+    char* line = (char*)malloc(256 * sizeof(char));
+    if (!line) {
+        fprintf(stderr, "Memory allocation failed for line buffer\n");
+        free(line_positions);
+        free(video_info_array);
+        return NULL;
+    }
+
     for (size_t i = 0; i < num_pages; ++i) {
         for (size_t j = 0; j < pages[i].size; ++j) {
             if (pages[i].data[j] == '\n') {
@@ -31,6 +36,7 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
                         fprintf(stderr, "Reallocation failed\n");
                         free(line_positions);
                         free(video_info_array);
+                        free(line);
                         return NULL;
                     }
                     
@@ -40,40 +46,23 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
 
                 line_positions[*num_lines] = (i * PAGE_SIZE) + j + 1;
                 
-                // Extract line safely
                 long start_pos = line_positions[*num_lines - 1];
                 long end_pos = line_positions[*num_lines] - 1;
                 size_t line_length = end_pos - start_pos + 1;
-                
-                
-                char* temp_line = (char*)realloc(line, line_length + 1);
-                if (!temp_line) {
-                    fprintf(stderr, "Memory allocation failed for line buffer\n");
-                    free(line);  // Free previous allocation
-                    line = NULL; // Set to NULL for safety
-                    continue;
-                } else {
-                    line = temp_line; // Update line if realloc was successful
-                }
 
-                if (!line) {
-                    fprintf(stderr, "Memory allocation failed for line buffer\n");
-                    continue;
-                }
+                // Resize line buffer if necessary
+                char* line = (char*) malloc((line_length + 1)*sizeof(char));
 
-                // Copy line data safely
                 size_t copied = 0;
                 size_t start_page = start_pos / PAGE_SIZE;
                 size_t start_offset = start_pos % PAGE_SIZE;
                 size_t end_page = end_pos / PAGE_SIZE;
                 
-                // Copy from first page
                 size_t first_page_bytes = (start_page == end_page) ? 
                     line_length : PAGE_SIZE - start_offset;
                 memcpy(line, &pages[start_page].data[start_offset], first_page_bytes);
                 copied += first_page_bytes;
 
-                // Copy from subsequent pages if line spans multiple pages
                 for (size_t p = start_page + 1; p <= end_page && copied < line_length; ++p) {
                     size_t bytes_to_copy = (p == end_page) ? 
                         (end_pos % PAGE_SIZE) + 1 : PAGE_SIZE;
@@ -83,26 +72,26 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
                     memcpy(line + copied, pages[p].data, bytes_to_copy);
                     copied += bytes_to_copy;
                 }
-                
+
                 line[line_length] = '\0';
 
-                // Parse CSV fields safely
+                // Parse CSV fields
                 char* token = strtok(line, ",");
                 char* title = NULL;
                 long views = 0;
                 int field = 0;
                 
                 while (token && field < 8) {
-                    if (field == 2) {  // Title field
+                    if (field == 2) {  
                         title = token;
-                    } else if (field == 7) {  // Views field
+                    } else if (field == 7) {  
                         views = atol(token);
                     }
                     token = strtok(NULL, ",");
                     field++;
                 }
 
-                // Store the information safely
+                // Store the information
                 if (title) {
                     strncpy(video_info_array[*num_lines - 1].title, title, 
                         sizeof(video_info_array[*num_lines - 1].title) - 1);
@@ -111,16 +100,13 @@ VideoInfo* process_pages_and_extract_data(Page* pages,size_t num_pages, size_t* 
                     video_info_array[*num_lines - 1].title[0] = '\0';
                 }
                 video_info_array[*num_lines - 1].views = views;
-                if (line != NULL) {
-                    free(line);
-                    line = NULL;
-                }
+                
                 (*num_lines)++;
             }
         }
     }
-     
-    return video_info_array; 
+    free(line);
+    return video_info_array;
 }
 
 char* extract_most_viewed_video_info(VideoInfo* videos_info, size_t num_lines) {
@@ -160,8 +146,8 @@ void* find_most_viewed_video(void* arg) {
     for (size_t i = data->start; i < data->end; ++i) {
         if (data->videos_info[i].views > local_max_views) {
             local_max_views = data->videos_info[i].views;
-            strncpy(local_most_viewed_title, data->videos_info[i].title, 128);
-            local_most_viewed_title[128] = '\0';  // Ensure null termination
+            strncpy(local_most_viewed_title, data->videos_info[i].title, 127);
+            local_most_viewed_title[127] = '\0';  // Ensure null termination
         }
     }
 
@@ -169,8 +155,8 @@ void* find_most_viewed_video(void* arg) {
     pthread_mutex_lock(data->mutex);
     if (local_max_views > *data->max_views) {
         *data->max_views = local_max_views;
-        strncpy(data->most_viewed_title, local_most_viewed_title, 128);
-        data->most_viewed_title[128] = '\0';
+        strncpy(data->most_viewed_title, local_most_viewed_title, 127);
+        data->most_viewed_title[127] = '\0';
     }
     pthread_mutex_unlock(data->mutex);
     pthread_exit(NULL);
@@ -191,7 +177,8 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
         fprintf(stderr, "Memory allocation for most_viewed_str failed\n");
         return; // Handle the error appropriately
     } 
-  
+ 
+    (*most_viewed_str)[0] = '\0';  // Initialize to empty string
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, 1024 * 1024);
@@ -202,7 +189,7 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
         thread_data[i].start = i * LINES_PER_THREAD;
         thread_data[i].end = (i == num_threads - 1) ? num_lines : (i + 1) * LINES_PER_THREAD;
         thread_data[i].max_views = &max_views;
-        thread_data[i].most_viewed_title = most_viewed_title;
+        thread_data[i].most_viewed_title = *most_viewed_str;
         thread_data[i].mutex = &mutex;
 
         pthread_create(&threads[i], &attr, find_most_viewed_video, (void*)&thread_data[i]);
@@ -215,7 +202,6 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     pthread_attr_destroy(&attr);
     // Print the final result
     (*most_views) = max_views;
-    strncpy(*most_viewed_str, most_viewed_title, 128);
-    (*most_viewed_str)[128] = '\0';  // Ensure null termination
+    (*most_viewed_str)[127] = '\0';  // Ensure null termination
 }
 
