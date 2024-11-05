@@ -33,7 +33,7 @@ VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t*
                     VideoInfo* new_info = (VideoInfo*)realloc(video_info_array, max_lines * sizeof(VideoInfo));
                     
                     if (!new_positions || !new_info) {
-    fprintf(stderr, "Reallocation failed\n");
+                        fprintf(stderr, "Reallocation failed\n");
                         if (new_positions) free(new_positions);
                         if (new_info) free(new_info);
                         free(line_positions);
