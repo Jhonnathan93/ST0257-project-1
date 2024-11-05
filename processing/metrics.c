@@ -34,19 +34,27 @@ VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t*
 
                     if (!new_positions || !new_info) {
                         fprintf(stderr, "Reallocation failed\n");
-                    
-                        if (new_positions) free(new_positions);
-                        if (new_info) free(new_info);
-                    
-                        free(line_positions);  // Liberar sólo si no fueron reasignados
-                        free(video_info_array);
-                        free(line);  // Liberar buffer de línea
-    
-                        return NULL;  // Salir si `realloc` falla
+
+                        if (new_positions) {
+                            line_positions = new_positions;  // Si `new_positions` es válido, actualizamos `line_positions`
+                        } else {
+                            free(line_positions);  // Solo liberamos si `realloc` no reasignó
+                        }
+
+                        if (new_info) {
+                            video_info_array = new_info;  // Si `new_info` es válido, actualizamos `video_info_array`
+                        } else {
+                            free(video_info_array);  // Solo liberamos si `realloc` no reasignó
+                        }
+
+                        free(line);  // Liberar el buffer de línea en cualquier caso
+                        return NULL;
                     }
 
+                    // Si `realloc` tuvo éxito, actualizamos ambos punteros.
                     line_positions = new_positions;
                     video_info_array = new_info;
+
                 }
 
                 line_positions[*num_lines] = (i * PAGE_SIZE) + j + 1;
