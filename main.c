@@ -145,7 +145,7 @@ int main(int argc, char *argv[]) {
             pthread_join(threads[i], NULL);
         }
  
-        printf("Overall most viewed title is: %s with %zu views.\n", most_viewed_title, most_views);
+        printf("Overall most viewed title is: %s with %u views.\n", most_viewed_title, most_views);
         printf("The total memory usage is: %ld KB (%ld MB)\n", total_memory_usage, total_memory_usage / 1024);
     } else {
         for (int i = 0; i < num_files; i++) {
