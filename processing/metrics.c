@@ -31,17 +31,20 @@ VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t*
                     max_lines *= 2;
                     long* new_positions = (long*)realloc(line_positions, max_lines * sizeof(long));
                     VideoInfo* new_info = (VideoInfo*)realloc(video_info_array, max_lines * sizeof(VideoInfo));
-                    
+
                     if (!new_positions || !new_info) {
                         fprintf(stderr, "Reallocation failed\n");
+                    
                         if (new_positions) free(new_positions);
                         if (new_info) free(new_info);
-                        free(line_positions);
-                        free(video_info_array);
-                        free(line);
-                        return NULL;
-                    }
                     
+                        free(line_positions);  // Liberar sólo si no fueron reasignados
+                        free(video_info_array);
+                        free(line);  // Liberar buffer de línea
+    
+                        return NULL;  // Salir si `realloc` falla
+                    }
+
                     line_positions = new_positions;
                     video_info_array = new_info;
                 }
