@@ -141,6 +141,10 @@ char* extract_most_viewed_video_info(VideoInfo* videos_info, size_t num_lines) {
         }
     }
 
+    #ifdef DEBUG
+        printf("Debug: Most viewed line is at %ld\n", line_most_viewed);
+    #endif
+
     if (max_views > 0) {
         return most_viewed_title;
     } else {
