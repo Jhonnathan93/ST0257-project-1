@@ -113,7 +113,7 @@ VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t*
 
 char* extract_most_viewed_video_info(VideoInfo* videos_info, size_t num_lines) {
     uint32_t max_views = 0;
-    // long line_most_viewed = 0;
+    long line_most_viewed = 0;
 
     char* most_viewed_title = (char*)malloc(256 * sizeof(char)); // Array to store the title of the most viewed video
     if (!most_viewed_title) {
