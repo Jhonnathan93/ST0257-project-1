@@ -33,7 +33,9 @@ VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t*
                     VideoInfo* new_info = (VideoInfo*)realloc(video_info_array, max_lines * sizeof(VideoInfo));
                     
                     if (!new_positions || !new_info) {
-                        fprintf(stderr, "Reallocation failed\n");
+    fprintf(stderr, "Reallocation failed\n");
+                        if (new_positions) free(new_positions);
+                        if (new_info) free(new_info);
                         free(line_positions);
                         free(video_info_array);
                         free(line);
@@ -111,7 +113,7 @@ VideoInfo* process_pages_and_extract_data(Page* pages, size_t num_pages, size_t*
 
 char* extract_most_viewed_video_info(VideoInfo* videos_info, size_t num_lines) {
     uint32_t max_views = 0;
-    long line_most_viewed = 0;
+    // long line_most_viewed = 0;
 
     char* most_viewed_title = (char*)malloc(256 * sizeof(char)); // Array to store the title of the most viewed video
     if (!most_viewed_title) {
@@ -169,7 +171,7 @@ void divide_and_process_chunks(VideoInfo *video_info_array, char** most_viewed_s
     ThreadData thread_data[num_threads];
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     uint32_t max_views = 0;
-    char most_viewed_title[128] = {0};
+    //char most_viewed_title[128] = {0};
 
     // size_t chunk_size = num_lines / num_threads;
     *most_viewed_str = malloc(128 * sizeof(char)); // Allocate space for 128 characters
